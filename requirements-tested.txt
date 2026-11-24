@@ -1,0 +1,20 @@
+# 本次打包环境中验证过的直接运行依赖；传递依赖仍由安装器解析。
+fastapi==0.141.1
+starlette==1.6.0
+uvicorn[standard]==0.52.3
+httpx==0.28.1
+python-multipart==0.0.32
+python-dotenv==1.2.3
+pydantic==2.13.4
+beautifulsoup4==4.15.0
+pymupdf==1.28.2
+Pillow==12.3.0
+psycopg2-binary==2.9.12
+minio==7.2.20
+openai==3.1.0
+sentence-transformers==5.7.0
+torch==2.13.0
+jieba==0.42.1
+rank-bm25==0.2.2
+mcp==2.3.0
+mcp-types==2.3.0

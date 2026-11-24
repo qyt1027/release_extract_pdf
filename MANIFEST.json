@@ -1,0 +1,827 @@
+[
+  {
+    "path": ".env.example",
+    "size": 1806,
+    "sha256": "eeb5634cfb4a466562f7df3575c55f14cfb0391849d1e9e7829c40b68a78676c"
+  },
+  {
+    "path": ".gitignore",
+    "size": 819,
+    "sha256": "2686ef6188912065c353ac252ecba86f4aeb609f67c941508f2ae5d71588a243"
+  },
+  {
+    "path": "api.py",
+    "size": 97,
+    "sha256": "0d7b5ba2824955f80aead9162ede87aab1e20e1a4beddd4b3d9f63872e6e6824"
+  },
+  {
+    "path": "build-info.json",
+    "size": 818,
+    "sha256": "a687217f3bc7a870c982c60b3d317c0c0a825c3004a00fdc46f71718f8781fac"
+  },
+  {
+    "path": "classification/__init__.py",
+    "size": 31,
+    "sha256": "588db8b1f788e27bf0a8d0152750a202d2544a2cdc41f813a2ff69f3b69a4031"
+  },
+  {
+    "path": "classification/document.py",
+    "size": 14934,
+    "sha256": "c6d606bb594ae61be25dd6b48c0dc81da4fa5fa976b02b0c0f705faa7789a0cb"
+  },
+  {
+    "path": "classification/tables.py",
+    "size": 10632,
+    "sha256": "56bdd77f0c02bbc03de2f6774742a031d09481e181edba7d39572b866a743511"
+  },
+  {
+    "path": "commands/__init__.py",
+    "size": 49,
+    "sha256": "79a42a43461d358e355b4c0175c1a02b146ee6a2730d42d60c5c5b316492a85f"
+  },
+  {
+    "path": "commands/arguments.py",
+    "size": 20521,
+    "sha256": "3b5f7802dab91471d7c391fc5950ef511a868e998b45e67d858a193fc6c63d75"
+  },
+  {
+    "path": "commands/entry.py",
+    "size": 7920,
+    "sha256": "232f14a42e96195920d84f3d052dd03f41f6b8943afd09b2e25a5ebfd94c0155"
+  },
+  {
+    "path": "commands/handlers.py",
+    "size": 23183,
+    "sha256": "40fa1157ba28cfd131c91bf226077f546a16f21f0e39224a25e3eed5141902fc"
+  },
+  {
+    "path": "core/__init__.py",
+    "size": 52,
+    "sha256": "762d94b54beff9483e5799567bbbf67cde7911b41ff69c2bea15d7e1a8ef9abc"
+  },
+  {
+    "path": "core/config.py",
+    "size": 6942,
+    "sha256": "5527e27a93a4421b7a8684a6ec614039073d1f6930cc4b8bfae7ac9a29bf0024"
+  },
+  {
+    "path": "core/models.py",
+    "size": 15145,
+    "sha256": "ae2a547e1600e2ff394b2a179bf4148817ecd1d8bb73923b9c5605d6c81620f0"
+  },
+  {
+    "path": "core/paths.py",
+    "size": 185,
+    "sha256": "e352c45ac8d755cc78b20f1b56ca31ee67c02b05be4b162eca13c549c29cc01c"
+  },
+  {
+    "path": "DEPLOY.md",
+    "size": 218,
+    "sha256": "7c20f36c03e9202cb621ca6d783081eb3369abb578da1db01de9ec4bc0e8a378"
+  },
+  {
+    "path": "docs/deployment.md",
+    "size": 5127,
+    "sha256": "6c37fdfe74f3254de2e81e5afee7d2f4860e27b1e51d235a7171e2c3e5d81849"
+  },
+  {
+    "path": "docs/policy-frontend-implementation.md",
+    "size": 3139,
+    "sha256": "56c399b028dd900133317a5b6cb1d98921372ba28ded15fbe51fc748f252e4b6"
+  },
+  {
+    "path": "docs/policy-search-evaluation-template.csv",
+    "size": 88,
+    "sha256": "95e699f382c555e9a1fb79aafebc65b22a5181341177a0fb9b3ac47033b5f664"
+  },
+  {
+    "path": "docs/research/policy-knowledge-history.md",
+    "size": 2789,
+    "sha256": "c8819cd694997b7f29ca0d4bbe25b01917a236c5de872e1f70bf87c0ca0f9ad6"
+  },
+  {
+    "path": "docs/research/policy-knowledge.md",
+    "size": 15631,
+    "sha256": "add4afadd93208908a06497a6b2af084e0116a1266f3fb0f2f238ee700040bee"
+  },
+  {
+    "path": "docs/superpowers/plans/2026-09-06-policy-process-graph.md",
+    "size": 3990,
+    "sha256": "e7d09f19d232ad9c5c454634dec6235865f5dcef010049ec2b04032275eaad89"
+  },
+  {
+    "path": "docs/superpowers/plans/2026-09-06-policy-quality-evaluation.md",
+    "size": 6165,
+    "sha256": "5e0c3ab3c8d90d514488d848b2a9ce8c3aa4a41a5be41a78c5def68d28bdca49"
+  },
+  {
+    "path": "docs/superpowers/plans/2026-09-07-policy-clause-retrieval-api.md",
+    "size": 8944,
+    "sha256": "92689408ae6fe9b77993641a852b9dfd016f33daa49599690d1714d8f5404bdf"
+  },
+  {
+    "path": "docs/superpowers/plans/2026-09-07-policy-package-refactor.md",
+    "size": 7503,
+    "sha256": "80361facefa80dd6a8abe63d6c7abd2c5cd4cf915c22f12f95e2673bc14673e6"
+  },
+  {
+    "path": "docs/superpowers/plans/2026-09-09-general-process-knowledge-graph.md",
+    "size": 28686,
+    "sha256": "e9be13b386acb58e1cfa4f70dba4869eb079daaa4e651723d2ac247985dea3cc"
+  },
+  {
+    "path": "docs/superpowers/plans/2026-09-10-policy-workflow-visualization.md",
+    "size": 10350,
+    "sha256": "94f4f4b302cab438073fd57ea8fee25568f36a5de7315babbdfe4be1ef03086e"
+  },
+  {
+    "path": "docs/superpowers/plans/2026-09-14-policy-document-abolition.md",
+    "size": 14937,
+    "sha256": "49a03b284e10af3bc47167dae4c57b540cc1c930e76ed01740cb518edb3c8116"
+  },
+  {
+    "path": "docs/superpowers/plans/2026-09-21-policy-bm25-retrieval-fix.md",
+    "size": 5801,
+    "sha256": "e5d8d14342d25d5b49013b19b0415a3dfadb7e07594999c60e108754e09cb6d2"
+  },
+  {
+    "path": "docs/superpowers/plans/2026-09-27-folder-reset-consistency.md",
+    "size": 1531,
+    "sha256": "3adffe66b7c54236bdf1ea0ab5546235c26fe87d9d0af5b5082bec7be4fb0509"
+  },
+  {
+    "path": "docs/superpowers/plans/2026-09-28-multiple-policies-per-file.md",
+    "size": 1095,
+    "sha256": "454ff99841ec717301a09e1e6b838e282589ac142dd4a34554467b9ea6524600"
+  },
+  {
+    "path": "docs/superpowers/specs/2026-09-06-policy-process-graph-design.md",
+    "size": 4529,
+    "sha256": "51fe33de04ac707db3f6a5baa8f666d4217007434687bbd509e08edadf6a1698"
+  },
+  {
+    "path": "docs/superpowers/specs/2026-09-06-policy-quality-evaluation-design.md",
+    "size": 3773,
+    "sha256": "81ec20a6d7914ced9a4c61d3d69fbc21aec3735ea704b4c460b408e8a1d9d4e3"
+  },
+  {
+    "path": "docs/superpowers/specs/2026-09-07-policy-clause-retrieval-api-design.md",
+    "size": 5648,
+    "sha256": "f7d6ff10a75283447ee9625c35dd0c7166dfbb7014c85c7ddf627af29b8e6cb3"
+  },
+  {
+    "path": "docs/superpowers/specs/2026-09-07-policy-package-refactor-design.md",
+    "size": 3895,
+    "sha256": "eedf257686d16f8739552d0aaf630618870b8aeb29c434c07e8e24582a20e9d5"
+  },
+  {
+    "path": "docs/superpowers/specs/2026-09-09-general-process-knowledge-graph-design.md",
+    "size": 7925,
+    "sha256": "1e15c637acaedfe15606e1751a688281a85e3a39a6fee32cf8d4b0675b31034c"
+  },
+  {
+    "path": "docs/superpowers/specs/2026-09-10-policy-workflow-visualization-design.md",
+    "size": 2629,
+    "sha256": "47fb70ef48ffb6adf5dee58efcb137f65262895a0a4946f08b283526af8dbd2c"
+  },
+  {
+    "path": "docs/superpowers/specs/2026-09-14-policy-document-abolition-design.md",
+    "size": 6881,
+    "sha256": "273023f75c62163c14b725838377a9c2821287f68a4b59848b4f50ec81c14e29"
+  },
+  {
+    "path": "examples/__init__.py",
+    "size": 37,
+    "sha256": "0017438d1c66b782a04da2c09675ac9f89bbf7814f4e4747f1f265f971655384"
+  },
+  {
+    "path": "examples/chart_description.py",
+    "size": 2977,
+    "sha256": "aedd8edd4ed5bea412035a49a99b624d681afe81a977a4e929229def59b0658f"
+  },
+  {
+    "path": "main.py",
+    "size": 148,
+    "sha256": "41c1451e73e052f4891f889399032d4e65bf403d55cd582b66e23b4711d38c06"
+  },
+  {
+    "path": "metadata/__init__.py",
+    "size": 676,
+    "sha256": "83d36ade10fdc8d96f9b8440815d5fcc878bce1bafb9d79be7e9428b196f62c7"
+  },
+  {
+    "path": "metadata/academic.py",
+    "size": 16251,
+    "sha256": "a42d07d2ec3f7599f38378a3c5dfb8fe2e3073d138bd4b22103dc3d315436f1e"
+  },
+  {
+    "path": "metadata/base.py",
+    "size": 402,
+    "sha256": "bfcb70b57588262f36f35ba754a4b80398e83f65b28820447e39cf0c561c570f"
+  },
+  {
+    "path": "metadata/document_number.py",
+    "size": 1012,
+    "sha256": "e18b6328b37b3a80dccbaf85942f934e68cf463a8d217b19683a39f37a1f1f88"
+  },
+  {
+    "path": "metadata/form.py",
+    "size": 853,
+    "sha256": "8e2f14c81d6ad2c20544b0615ce509f668896727f8b9a5a9caf928f9e469d19c"
+  },
+  {
+    "path": "metadata/policy.py",
+    "size": 6423,
+    "sha256": "84bbe3473fff0dba206707f0b11ee792b06c4bdfcb1f38343f138e52a4fcca63"
+  },
+  {
+    "path": "parsers/__init__.py",
+    "size": 275,
+    "sha256": "d99fa091a9c687366d0b4864fd5b8a1e7ccf229ea9ce3216be8a6c092b3adf6c"
+  },
+  {
+    "path": "parsers/base.py",
+    "size": 793,
+    "sha256": "932b79d76779d7960f0c8d3092059cfc1b158446d2f3cebddf50a162c40e31b7"
+  },
+  {
+    "path": "parsers/cloud_client.py",
+    "size": 25006,
+    "sha256": "497881015c63ae11a807b63b290fdf482ec91b0b1a7c02e24deb7b4629ddfb9b"
+  },
+  {
+    "path": "parsers/cloud_mineru.py",
+    "size": 19976,
+    "sha256": "a83ba36e92b69f5ba315b4c4b83ab617aa11733b77cb3bcac455903ff6bcfc0b"
+  },
+  {
+    "path": "parsers/dispatcher.py",
+    "size": 2567,
+    "sha256": "c9cddd8b30ecccbaef2cbf9ed6f77548a81fd5214263afd886dbf95483efebd0"
+  },
+  {
+    "path": "parsers/docx_parser.py",
+    "size": 1910,
+    "sha256": "02a3fbcacafdb595846cd4958052221f607fdb86b1b487558b50323462358566"
+  },
+  {
+    "path": "parsers/mhtml_doc.py",
+    "size": 3389,
+    "sha256": "6ba757930e6345c28125204b194ad7f2ccddad7565f60fa95f40ae8d44514f17"
+  },
+  {
+    "path": "parsers/mineru.py",
+    "size": 5300,
+    "sha256": "e5476a6a72103b26e2ef3ab75ebe1a262a3fd70627a02b14408741a940c08f3e"
+  },
+  {
+    "path": "parsers/pymupdf_parser.py",
+    "size": 4052,
+    "sha256": "f99a6b51887cfb4ba8dee2268b422ff306a73e32a05bdec72fe20631646278f5"
+  },
+  {
+    "path": "policy/__init__.py",
+    "size": 79,
+    "sha256": "63581ebcc4fda5bce99013f5f673697580c62c9618349183882a0e273a6b6609"
+  },
+  {
+    "path": "policy/abolition.py",
+    "size": 22566,
+    "sha256": "4bd13baeac8bbcb17635a8cade948070d3cdd9043fde01bd53383c684c5f8c67"
+  },
+  {
+    "path": "policy/answer_ui.py",
+    "size": 592,
+    "sha256": "fc0f83263f38561e7130019404478bb2bef0c8b35c546898423f3ee7b76059af"
+  },
+  {
+    "path": "policy/answering.py",
+    "size": 14387,
+    "sha256": "1f250ba0e8a8a01c158a13c3625426f40e6fb137f4229a41590615b8108a422e"
+  },
+  {
+    "path": "policy/clause_classification/__init__.py",
+    "size": 68,
+    "sha256": "9d5458ce1967c3888ca9a303836bd2e4013d69f703dbe2bd5b9d077afa6e3938"
+  },
+  {
+    "path": "policy/clause_classification/logic.py",
+    "size": 4723,
+    "sha256": "edfed506df05080d543d6b7412248787b59930216e3ffaf0029351752dd8e727"
+  },
+  {
+    "path": "policy/clause_classification/review.py",
+    "size": 8310,
+    "sha256": "d1147c04fe144a8b08f440d745a18ebad053a6e0852a5fa2cbcc37d4343f236e"
+  },
+  {
+    "path": "policy/clause_classification/runner.py",
+    "size": 6620,
+    "sha256": "ee7c69c0b93792576ac08de408330577c2b9e1573f564e89bb1c514b8053ef65"
+  },
+  {
+    "path": "policy/clause_export.py",
+    "size": 4242,
+    "sha256": "6de6c9367c3ace6db9877910bcf024c574d3b690b62851233f0efd18c52760bd"
+  },
+  {
+    "path": "policy/document_parts.py",
+    "size": 3706,
+    "sha256": "9cfc6a90e5ac6785c819aeb724c7444b0365ea120b6a38e4b3bacc7166321b71"
+  },
+  {
+    "path": "policy/governance.py",
+    "size": 8985,
+    "sha256": "0e1aa79034c68b51f04c608770c477be2cbe743c792d046dacbc5a6eabf9bc24"
+  },
+  {
+    "path": "policy/graph/__init__.py",
+    "size": 68,
+    "sha256": "9d5458ce1967c3888ca9a303836bd2e4013d69f703dbe2bd5b9d077afa6e3938"
+  },
+  {
+    "path": "policy/graph/domain_catalog.json",
+    "size": 1733,
+    "sha256": "5241cfc0d975a9f0380045f15cd24182908aabb07a9c8aab130658e2ea0547a4"
+  },
+  {
+    "path": "policy/graph/domain_catalog.py",
+    "size": 4712,
+    "sha256": "7548b373a84a8f3894455304bf9e75c2f8d30f8e69bc28d2e0301bf74f6e54f6"
+  },
+  {
+    "path": "policy/graph/extraction.py",
+    "size": 33586,
+    "sha256": "7337e0b29a1853058d56b2cd490102fb8ca1cd17a8521bbef563fb27c12ac17b"
+  },
+  {
+    "path": "policy/graph/process.py",
+    "size": 6221,
+    "sha256": "ceec03ea1c8bec5cbfb8708c9d3ae651a0fe8e1e72398685a1ffdf8681fa905e"
+  },
+  {
+    "path": "policy/graph/process_runner.py",
+    "size": 3603,
+    "sha256": "c5f7fec1b45d1f989407f949f5b61e488c3678e19e19b5e1d25dd22ab3d7608f"
+  },
+  {
+    "path": "policy/graph/reviewer.py",
+    "size": 16242,
+    "sha256": "2bbd350510ff0cc2738ff7e24967a9f8fc34bb03409d9b87ddb6d8f71d009d2c"
+  },
+  {
+    "path": "policy/graph/workflow_graph.py",
+    "size": 6252,
+    "sha256": "159b1f238ecf085dbe1910b76e7957bb886ead97b94c409f6ed3f72a6ba9cd9a"
+  },
+  {
+    "path": "policy/knowledge_v2/__init__.py",
+    "size": 68,
+    "sha256": "9d5458ce1967c3888ca9a303836bd2e4013d69f703dbe2bd5b9d077afa6e3938"
+  },
+  {
+    "path": "policy/knowledge_v2/logic.py",
+    "size": 24740,
+    "sha256": "3ec10148ab0bc9bbacdafad390dc1e41182c0b66a03974a36d8eb54f3e26d637"
+  },
+  {
+    "path": "policy/knowledge_v2/retrieval.py",
+    "size": 11634,
+    "sha256": "1ccaee0beb77d55ed4586587e7b9f12e09802efc3c5000f06f47b8b99ce20b91"
+  },
+  {
+    "path": "policy/knowledge_v2/review.py",
+    "size": 8984,
+    "sha256": "c4b6d3972d51ae5c1f021a47620029ee4f5d08e519f87306734827125f977d3f"
+  },
+  {
+    "path": "policy/knowledge_v2/runner.py",
+    "size": 21751,
+    "sha256": "04dd5e749d2c51b3ea90133749253922d3a86eed570b043e59368cb51fc7548c"
+  },
+  {
+    "path": "policy/knowledge_v2/sampling.py",
+    "size": 4196,
+    "sha256": "be2965aa31f7c15cb99e576e74be436a982718f18408511e9ad1909de63eb1f8"
+  },
+  {
+    "path": "policy/llm.py",
+    "size": 908,
+    "sha256": "bb6995df76bd79d920173b413e10958d0180d362075763f533f45170887a587f"
+  },
+  {
+    "path": "policy/pipeline.py",
+    "size": 22906,
+    "sha256": "92f1b3b3941704382530bbc710ace9dde2411f3f04c912df58ee4bd3b311184a"
+  },
+  {
+    "path": "policy/quality.py",
+    "size": 23463,
+    "sha256": "0b387bdc2321be838c7546de28d0f9ba7cb6e638dd3c1adf3a1ce857fccfae09"
+  },
+  {
+    "path": "policy/retrieval.py",
+    "size": 28379,
+    "sha256": "0631eab6332f3a2bc4ae0ce20ca888f3ee08d4a1a1e1268dcd1fd2a594cc2fab"
+  },
+  {
+    "path": "policy/semantic_reranking.py",
+    "size": 7040,
+    "sha256": "fc533a4af45b525eb5bad65baed0cade35180eb4388fe5adcc233670b4774d93"
+  },
+  {
+    "path": "policy/storage.py",
+    "size": 107342,
+    "sha256": "ff7298d98042680f1acdef4778a5fc3002fb4cb0bd698026fd57d894cfbc35d8"
+  },
+  {
+    "path": "policy/temporal.py",
+    "size": 4283,
+    "sha256": "59cd3ab63ce13b48967a9355a3c0134cff6e301f21e36585fd185be49afe9efa"
+  },
+  {
+    "path": "policy/warmup.py",
+    "size": 1394,
+    "sha256": "b337f9311ad72f0179995db58b01082d735a21a35c40cc6491673e6a4aec9a2a"
+  },
+  {
+    "path": "policy/web_catalog.py",
+    "size": 3454,
+    "sha256": "6092466e966c5dca2c00208dfe6b7247c8d8c8e2e995664504a81dabf64e5ecf"
+  },
+  {
+    "path": "policy/web_conversations.py",
+    "size": 6584,
+    "sha256": "3dab33e98b89161fc5d57add4ac97eca6a43cdac7d200e0d3e750d84283bfb80"
+  },
+  {
+    "path": "policy/web_ui/answer.css",
+    "size": 12560,
+    "sha256": "f2d1a96f03e88664675fc7bff261772bdcfe55c3429c3ff2dd3b42b2395ad94c"
+  },
+  {
+    "path": "policy/web_ui/answer.html",
+    "size": 5650,
+    "sha256": "df8b4b656e4bec5c765afa00f6412bf72b5bf7d5a8fe3143eb14288ba08ca8d5"
+  },
+  {
+    "path": "policy/web_ui/answer.js",
+    "size": 22407,
+    "sha256": "68a953b16ec707526c590bc9d613ea92f10d8082f0a9d195b118a9fe8432672b"
+  },
+  {
+    "path": "policy/web_ui/clause_tree.js",
+    "size": 1815,
+    "sha256": "b403b658bf4c9fb066940f80253c8414cc50f02ebc7ed771d1b4ff4163d805f7"
+  },
+  {
+    "path": "policy_mcp/__init__.py",
+    "size": 166,
+    "sha256": "5fa608faa10b3847adf70b7faf5ad70aebe363ee84a30a9191a3e55252b89448"
+  },
+  {
+    "path": "policy_mcp/__main__.py",
+    "size": 961,
+    "sha256": "1b05ea353167043fc8c719aa679f2445b2f283440cd73db4ab3d50fa616dff8d"
+  },
+  {
+    "path": "policy_mcp/api_client.py",
+    "size": 3914,
+    "sha256": "5b6391866e26d52b5e327eaa6d696ebc577142c5df89e10a770db30170d60ac4"
+  },
+  {
+    "path": "policy_mcp/README.md",
+    "size": 9708,
+    "sha256": "7a032784f74c92de85b676eb7ca4be570bec8496a28671c91f6e98cbc6990e79"
+  },
+  {
+    "path": "policy_mcp/server.py",
+    "size": 2922,
+    "sha256": "0d0cfbf11bbf14206f3bf2ce33d0a84521c6246f9bde0feb2ae9364bb197eeeb"
+  },
+  {
+    "path": "policy_mcp/tools.py",
+    "size": 4013,
+    "sha256": "f9a86058cb90281935b4c0444ea649b6964dc1cbc41a1dabf0ed9392c3cd4fb4"
+  },
+  {
+    "path": "processing/__init__.py",
+    "size": 46,
+    "sha256": "1f8f1361dbb7bf98ee6696896db056088612ebe5ace6492fabb57a8104fad4ac"
+  },
+  {
+    "path": "processing/batch.py",
+    "size": 21300,
+    "sha256": "3d365ed42606c0608dd1efd79bede3785726b81f33338927e23433a5c6640b14"
+  },
+  {
+    "path": "processing/images.py",
+    "size": 4563,
+    "sha256": "d99fb8689a841f955518887658ee6e01851d921e3b13a71b85d5b106a6f774cb"
+  },
+  {
+    "path": "processing/pipeline.py",
+    "size": 19913,
+    "sha256": "22eede929b99af6fb5182f01137610d050a0354a818db045272e2ff5166418fb"
+  },
+  {
+    "path": "processing/reset.py",
+    "size": 32502,
+    "sha256": "6e5618c433012fdf11e5a671ba66c0d2b50978488b112580d46214c289e23dd9"
+  },
+  {
+    "path": "processing/tables.py",
+    "size": 22284,
+    "sha256": "28147616a250a94f26f5b8e4641605674974c4fa3b9743eccced7c797ba2bce1"
+  },
+  {
+    "path": "processing/text.py",
+    "size": 14454,
+    "sha256": "9247ec94679b7820d649b8ec421a6adfdab5a34774e6f9ea2fda239d36772840"
+  },
+  {
+    "path": "README.md",
+    "size": 25641,
+    "sha256": "e49020312db09b600830c9fd2a104149a3231b4018a8fc30f98bbf184cbb9153"
+  },
+  {
+    "path": "RELEASE.md",
+    "size": 589,
+    "sha256": "47566a459152c0345662959727e4ad20bbc2e139aacf9970acbc7bcfb5b6e354"
+  },
+  {
+    "path": "requirements-dev.txt",
+    "size": 95,
+    "sha256": "c3ad46059524299e3c87dbe96d4a317644844aeecc7cfe51f8e5a09573aa4e15"
+  },
+  {
+    "path": "requirements-tested.txt",
+    "size": 458,
+    "sha256": "ccb4951250811647fed78aaf1375527417058f04d4657c5d540062d3e6e51c27"
+  },
+  {
+    "path": "requirements.txt",
+    "size": 523,
+    "sha256": "dc728df18611d50f3945aabbd39db5e80190165806c66f6bd8fae4748eb8d1ab"
+  },
+  {
+    "path": "scripts/__init__.py",
+    "size": 43,
+    "sha256": "36c7fca2dc8fcbfb3289fedd1f5d3e3cc6fa3ea7f9d32ef927b2d82fb0db62c2"
+  },
+  {
+    "path": "scripts/build_deployment_bundle.py",
+    "size": 4309,
+    "sha256": "127dad8c65246fee2abfa006a5f96d3718732c91e3bff23107e2bf3a5fb911fe"
+  },
+  {
+    "path": "scripts/mineru_parse.py",
+    "size": 2347,
+    "sha256": "6b4461a51a63c057b242b2e80a57d7d8823f79bd4cd47c942b05d00c757160fc"
+  },
+  {
+    "path": "scripts/mineru_probe.py",
+    "size": 1111,
+    "sha256": "3371f46b25a9cceddfd3072a95c08e19903ff202392fa3d7ccc8c790ec30fdb9"
+  },
+  {
+    "path": "storage/__init__.py",
+    "size": 52,
+    "sha256": "75803f659b83423953229d8da41eff972b4e715b61234a277638f9d8fea4f651"
+  },
+  {
+    "path": "storage/adapters.py",
+    "size": 16215,
+    "sha256": "ad6ec15cdc1e6c23b5c78552453092f533abee7828d5213b3099bc7cdb38ff4b"
+  },
+  {
+    "path": "storage/file_records.py",
+    "size": 15123,
+    "sha256": "3c7f29bdd3427e2acbdb603c0a346269fe206b8fef90c87fbd80342ba093657b"
+  },
+  {
+    "path": "storage/table_catalog.py",
+    "size": 13241,
+    "sha256": "2a79964ab95dd0962cd57506ab3c85e4bc8a92269e1065a47ecb6397ce4e3a47"
+  },
+  {
+    "path": "tests/__init__.py",
+    "size": 40,
+    "sha256": "51fff0b0a754aed31cd170accd390e63396ff396c880abe7ca0c52d69817bed4"
+  },
+  {
+    "path": "tests/test_batch_status.py",
+    "size": 5100,
+    "sha256": "12b64e3e362893e03c86f8c738590450bba7b1285c61b7f4322e82df6cdd34a7"
+  },
+  {
+    "path": "tests/test_document_classification_inputs.py",
+    "size": 3149,
+    "sha256": "f0bf3f0c38fd3c940420aeb2466fc304da9ca2ad99150383f4795fce71a5ded0"
+  },
+  {
+    "path": "tests/test_document_numbers.py",
+    "size": 3164,
+    "sha256": "4c2f9aca71e1c448ead5533089222cc21c866be30f1ec40d78c43e39eade1bd4"
+  },
+  {
+    "path": "tests/test_file_reset_cli.py",
+    "size": 16319,
+    "sha256": "af641cfac202ad54800c620760b540fa98f07fd37e97d8c52063a91a550f344c"
+  },
+  {
+    "path": "tests/test_file_reset_consistency.py",
+    "size": 29043,
+    "sha256": "f1a659b26aacc8510a8b0678cdd44d966a537d149ccaaf3504266ab23b50f0b1"
+  },
+  {
+    "path": "tests/test_main_cli.py",
+    "size": 6354,
+    "sha256": "d1e3a2692200bf1a984c442a57014460414e66ee47b7bc3e1daddc15d250402b"
+  },
+  {
+    "path": "tests/test_mhtml_doc_parser.py",
+    "size": 5734,
+    "sha256": "b3992da4f2e6b45cb377710e0ba75c29eeda22c6d05cd55fab1830e09492bd0f"
+  },
+  {
+    "path": "tests/test_mineru.py",
+    "size": 5420,
+    "sha256": "c452808abd9c82698c09ef41e6a9f8506720fd839ad75a99dd2f915ec2d68220"
+  },
+  {
+    "path": "tests/test_policy_abolition.py",
+    "size": 38016,
+    "sha256": "866eaf07c9af3b508c2f505a1179a237f2c4bcacb2e784f576a5770499a88a5f"
+  },
+  {
+    "path": "tests/test_policy_abolition_cli.py",
+    "size": 13584,
+    "sha256": "b1606599beef703d5b0d17831eca2a8ac2298346bfac5d188962b79f7679b638"
+  },
+  {
+    "path": "tests/test_policy_abolition_versions.py",
+    "size": 5003,
+    "sha256": "779bc37e38dabecd13a7b67f43df8f573c5018f64a537a233ddc714a7e99dbde"
+  },
+  {
+    "path": "tests/test_policy_answering.py",
+    "size": 17463,
+    "sha256": "2d81bb054b0807ae79d8b9a4408b5cd9d57da47af89679f63028da8cf634d834"
+  },
+  {
+    "path": "tests/test_policy_classification.py",
+    "size": 12269,
+    "sha256": "7f81142d39cd9e628a2836e49ad454a4a8ee1423554be5411671aac324168c15"
+  },
+  {
+    "path": "tests/test_policy_clause_export.py",
+    "size": 3605,
+    "sha256": "6798f570f514d2b465c46bc28f3abe059f455830311a54d8e43be323d8d99763"
+  },
+  {
+    "path": "tests/test_policy_clause_hierarchy.py",
+    "size": 10753,
+    "sha256": "ad4e60a505f037dbbc91c294a6ddbece5590f097e67d78cba3d671e93cb6e0ae"
+  },
+  {
+    "path": "tests/test_policy_default_validity.py",
+    "size": 2894,
+    "sha256": "5a732696ee663a99a7be781eb2304b8f39b0ea505ebc2d64044e60e196dea61f"
+  },
+  {
+    "path": "tests/test_policy_document_parts.py",
+    "size": 4293,
+    "sha256": "7b07aaa26eff75da51553e72bfcec0bdd3435452fb358baba54e94f30eb1a90e"
+  },
+  {
+    "path": "tests/test_policy_domain_catalog.py",
+    "size": 3054,
+    "sha256": "3293d147d96968fa5c09794ec1fbb695ae78a3f16152da41c10bea28b3cb3e42"
+  },
+  {
+    "path": "tests/test_policy_heading_merge.py",
+    "size": 3316,
+    "sha256": "0664caacf592a01987a3a0157ec986156e1bead4937a43a2b0d6bcc12f383223"
+  },
+  {
+    "path": "tests/test_policy_hierarchy_context.py",
+    "size": 1629,
+    "sha256": "28910a08dfd0f2da51b0120ba6fab37760b8f67778753c5d59ef37a59782552f"
+  },
+  {
+    "path": "tests/test_policy_knowledge_v2.py",
+    "size": 37576,
+    "sha256": "c6fd71aa9846e6e99190ac9cbf34b7f446aa7c7c526a74ed4e49ff970a737f61"
+  },
+  {
+    "path": "tests/test_policy_mcp.py",
+    "size": 15019,
+    "sha256": "5d895a1471d133a39200c733396e203c056129861f93cb2f9d087c5297751841"
+  },
+  {
+    "path": "tests/test_policy_mcp_tools.py",
+    "size": 4845,
+    "sha256": "0f4a5ea4442f59d93966959754eb5317d4dcd4e33e28bcec15ea7f0622819f07"
+  },
+  {
+    "path": "tests/test_policy_mcp_tools_script.py",
+    "size": 4876,
+    "sha256": "54a7dd153b0bc9cfa4d08bc6ac6239ad5633dc2a7be027219d49afe16e77f579"
+  },
+  {
+    "path": "tests/test_policy_metadata.py",
+    "size": 8809,
+    "sha256": "6f33696f221542001e4274b482fdda5ecdb0333ff7d4c5610a3d0f144c9ff98e"
+  },
+  {
+    "path": "tests/test_policy_process.py",
+    "size": 23464,
+    "sha256": "026eb87dd1f2012a8eac0ea8d286b4e6a8995b329d5fe21214f1661ff9379657"
+  },
+  {
+    "path": "tests/test_policy_quality.py",
+    "size": 14122,
+    "sha256": "c16804ad9ae6911dcf2667d819cf073cafbc7791325c3740bf5b766b9844569f"
+  },
+  {
+    "path": "tests/test_policy_retrieval.py",
+    "size": 21634,
+    "sha256": "ed0012a35a63cc9b8759872a8a3d17ab97e2eece96b6a55edee805be4a64822f"
+  },
+  {
+    "path": "tests/test_policy_sampling_v2.py",
+    "size": 1892,
+    "sha256": "119e3892c6ef443c894f152042cac23250bf225336edf32eeab40cdf7ce6f301"
+  },
+  {
+    "path": "tests/test_policy_semantic_reranking.py",
+    "size": 10437,
+    "sha256": "533fb6173c62b851ecbc0b6279866754c161074933abddb9c5bb8f8ef2a1a0f5"
+  },
+  {
+    "path": "tests/test_policy_temporal.py",
+    "size": 6746,
+    "sha256": "ea3cbc804ff7ccfa5cf9d0c31a570113e1b07bb3ef40674794f6660f881e6a66"
+  },
+  {
+    "path": "tests/test_policy_warmup.py",
+    "size": 2291,
+    "sha256": "e39151c163ab79a03a000691599d2c9d9d145bbaf5ef73725c53ea2402a7bca3"
+  },
+  {
+    "path": "tests/test_policy_web_api.py",
+    "size": 6053,
+    "sha256": "2b815c3e3d3b81ea3d6fa08f9d43747e8fd0916ea4f1a2e631b4bd4eeacfe90f"
+  },
+  {
+    "path": "tests/test_policy_workflow_extraction.py",
+    "size": 15715,
+    "sha256": "3c89b379333a08ed8def0427162d00c1ef993fd1ed02ca2e89ead0f70f7e93d7"
+  },
+  {
+    "path": "tests/test_project_layout.py",
+    "size": 3266,
+    "sha256": "9ea3da481c7bb770d9c327ecc1bd9781d677773301f8701184fb1f79ca21a490"
+  },
+  {
+    "path": "tests/test_single_clause_export.py",
+    "size": 2209,
+    "sha256": "7c11fdebed33c1eced028b55480d5b942c2f7f1b9ef9d5d8bd146533deafee82"
+  },
+  {
+    "path": "tests/test_table_catalog.py",
+    "size": 8484,
+    "sha256": "ffbd509f8513bc7b7be5a337dfb5c90504ad72e66e4bae583211d29c9001d830"
+  },
+  {
+    "path": "tests/test_table_pipeline.py",
+    "size": 12215,
+    "sha256": "3a74c7045ae77a3b77e4806ac73fb6b0087d4da439ebd47c4738ccb0de1a29ba"
+  },
+  {
+    "path": "tests/test_table_search_api.py",
+    "size": 10505,
+    "sha256": "0290f6f83607d8ea5d85c663f3aa4ac834887167850d09156cf2f0f30e0347e3"
+  },
+  {
+    "path": "tests/test_text_pipeline.py",
+    "size": 3106,
+    "sha256": "544d7702f5fe860d47e69d89ec736a2b4e2120b1e97419eeb99bf397600fe81a"
+  },
+  {
+    "path": "tests/test_upload_file_names.py",
+    "size": 6608,
+    "sha256": "b55961bb81a4ef0e07876f432d94301db7c6536b199927a63436fba28655deb6"
+  },
+  {
+    "path": "web/__init__.py",
+    "size": 30,
+    "sha256": "449133ac1350bacc720da5772831ab37e5fb675f05f6e2c9c3d55a88a629420b"
+  },
+  {
+    "path": "web/api.py",
+    "size": 17003,
+    "sha256": "0a7ef98b0b4242ebfc0b8a6c439ae05b4af26ecb7e9833fc57c0dfd8ef1a295f"
+  }
+]

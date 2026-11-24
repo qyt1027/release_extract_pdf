@@ -1,0 +1,5 @@
+-r requirements.txt
+
+# 手动联调脚本与自动回归测试
+requests>=2.34.2
+httpx2>=2.10.0

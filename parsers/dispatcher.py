@@ -1,0 +1,73 @@
+# parsers/dispatcher.py
+from typing import List, Optional
+
+from core.config import app_config
+from core.models import ContentBlock
+from .base import ParserStrategy
+from .cloud_mineru import CloudMineruParser
+from .mineru import MinerUParser
+from .pymupdf_parser import PyMuPDFParser
+
+
+class PDFParser:
+    """
+    统一解析调度器
+    根据配置或参数选择具体的解析后端
+    """
+
+    def __init__(
+            self,
+            backend: Optional[str] = None,
+    ):
+        """
+        Args:
+            backend: 'mineru' | 'cloudmineru' | 'pymupdf'，默认从 config 读取
+        """
+        self.backend = backend or app_config.parser.parser_backend
+        self._strategy: Optional[ParserStrategy] = None
+
+    @property
+    def strategy(self) -> ParserStrategy:
+        if self._strategy is None:
+            if self.backend == "mineru":
+                self._strategy = MinerUParser()
+            elif self.backend == "pymupdf":
+                self._strategy = PyMuPDFParser(
+                    extract_images=app_config.parser.pymupdf_extract_images,
+                    extract_tables=app_config.parser.pymupdf_extract_tables,
+                )
+            elif self.backend == "cloudmineru":
+                self._strategy = CloudMineruParser(mode=app_config.cloudmineru.mode)
+            else:
+                raise ValueError(f"不支持的 PDF 解析后端: {self.backend}")
+        return self._strategy
+
+    def parse(self, file_path: str, page_count: int = 0) -> List[ContentBlock]:
+        """同步解析 PDF"""
+        if file_path.lower().endswith(".docx"):
+            from .docx_parser import parse_docx
+
+            return parse_docx(file_path)
+        if file_path.lower().endswith(".doc"):
+            from pathlib import Path
+            from .mhtml_doc import is_mhtml_document, parse_mhtml_document
+
+            if is_mhtml_document(Path(file_path).read_bytes()):
+                return parse_mhtml_document(file_path)
+        return self.strategy.parse(file_path, page_count)
+
+    def submit(self, file_path: str) -> str:
+        """提交异步任务"""
+        return self.strategy.submit(file_path)
+
+    def get_status(self, task_id: str):
+        """查询任务状态"""
+        return self.strategy.get_status(task_id)
+
+    def poll_until_done(self, task_id: str, timeout_seconds: Optional[float] = None):
+        """轮询直到完成"""
+        return self.strategy.poll_until_done(task_id, timeout_seconds)
+
+    def close(self):
+        if hasattr(self._strategy, 'close'):
+            self._strategy.close()
