@@ -54,6 +54,9 @@ class PDFParser:
 
             if is_mhtml_document(Path(file_path).read_bytes()):
                 return parse_mhtml_document(file_path)
+            from .legacy_doc import parse_legacy_doc
+
+            return parse_legacy_doc(file_path)
         return self.strategy.parse(file_path, page_count)
 
     def submit(self, file_path: str) -> str:

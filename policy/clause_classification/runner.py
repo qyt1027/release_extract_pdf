@@ -14,7 +14,7 @@ from policy.llm import create_llm_client
 PROMPT_VERSION = "policy-clause-classification-v1"
 RULE_VERSION = "policy-clause-classification-rules-v1"
 SCHEMA_VERSION = "policy-clause-classification-schema-v1"
-CLASSIFIABLE_LEVELS = frozenset({"article", "paragraph", "item"})
+CLASSIFIABLE_LEVELS = frozenset({"article", "paragraph", "item", "appendix"})
 
 
 def select_classifiable_clauses(clauses: list[dict[str, Any]]) -> list[dict[str, Any]]:

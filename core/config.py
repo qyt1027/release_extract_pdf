@@ -39,11 +39,12 @@ class MinerUConfig:
     ))
     api_key: str = field(default_factory=lambda: os.getenv("MINERU_API_KEY", ""))
     model: str = field(default_factory=lambda: os.getenv("MINERU_MODEL", "mineru2.5-1.2b"))
-    dpi: int = field(default_factory=lambda: int(os.getenv("MINERU_DPI", "144")))
-    max_pages: int = field(default_factory=lambda: int(os.getenv("MINERU_MAX_PAGES", "20")))
+    dpi: int = field(default_factory=lambda: int(os.getenv("MINERU_DPI", "72")))
+    pages_per_request: int = field(default_factory=lambda: int(os.getenv("MINERU_PAGES_PER_REQUEST", "1")))
     timeout_seconds: float = field(
         default_factory=lambda: float(os.getenv("MINERU_TIMEOUT_SECONDS", "300"))
     )
+    max_retries: int = field(default_factory=lambda: int(os.getenv("MINERU_MAX_RETRIES", "2")))
 
 
 @dataclass
@@ -58,7 +59,8 @@ class CloudMinerUConfig:
     batch_api_url: str = field(default_factory=lambda: os.getenv(
         "CLOUDMINERU_BATCH_API_URL", "https://mineru.net/api/v4/file-urls/batch"
     ))
-    batch_api_key = get_required_env("CLOUDMINERU_API_KEY")
+    # 仅在使用云端精准解析时校验，避免阻塞本地 MinerU 等其他后端。
+    batch_api_key: str = field(default_factory=lambda: os.getenv("CLOUDMINERU_API_KEY", ""))
 
 
     timeout_per_page: int = 3

@@ -48,6 +48,24 @@ class PolicyWebApiTests(unittest.TestCase):
         self.assertEqual(result["issue_date"], "2024-01-02")
         self.assertNotIn("secret", result)
 
+    def test_catalog_exposes_month_without_a_fictitious_day(self):
+        result = _public_row({"policy_id": "p1", "issue_month": "2013-03"}, PUBLIC_DOCUMENT_FIELDS)
+        self.assertEqual(result.get("issue_month"), "2013-03")
+        self.assertIsNone(result["issue_date"])
+
+    def test_catalog_and_detail_include_the_same_unit_hierarchy(self):
+        from policy.web_catalog import get_policy_detail
+
+        row = {"policy_id": "p1", "title": "评选细则", "applicable_unit": ["心理学系"]}
+        expected = ["前沿交叉学科研究院-心理学系"]
+        self.assertEqual(_public_row(row, PUBLIC_DOCUMENT_FIELDS)["applicable_unit_paths"], expected)
+        with patch("policy.web_catalog.get_policy_document", return_value=row), patch(
+            "policy.web_catalog.get_policy_clauses", return_value=[]
+        ):
+            detail = get_policy_detail("p1")
+        self.assertEqual(detail["policy"]["applicable_unit"], ["前沿交叉学科研究院心理学系"])
+        self.assertEqual(detail["policy"]["applicable_unit_paths"], expected)
+
     def test_catalog_uses_parameterized_filters_and_pagination(self):
         cursor = MagicMock()
         cursor.fetchone.return_value = {"total": 1}
@@ -62,7 +80,7 @@ class PolicyWebApiTests(unittest.TestCase):
             result = list_policies("采购", "current", 10, 20)
         self.assertEqual(result["total"], 1)
         self.assertEqual(result["items"][0]["policy_id"], "p1")
-        self.assertEqual(cursor.execute.call_args_list[1].args[1], ("%采购%", "%采购%", "%采购%", "current", 10, 20))
+        self.assertEqual(cursor.execute.call_args_list[1].args[1], ("%采购%", "%采购%", "%采购%", "%采购%", "current", 10, 20))
 
     def test_policy_catalog_routes_and_validation(self):
         async def call():

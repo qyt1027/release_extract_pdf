@@ -234,7 +234,9 @@ class PolicyAbolitionExtractionTests(unittest.TestCase):
 
     def test_doc_number_match_wins_over_title_candidate(self) -> None:
         """防止文号唯一命中后仍因标题候选覆盖目标。"""
-        with patch("policy.abolition.find_policy_documents_by_doc_number", return_value=[{"policy_id": "old_2000"}]), \
+        with patch("policy.abolition.find_policy_documents_by_doc_number", return_value=[{
+            "policy_id": "old_2000", "title": "武汉大学财务管理办法", "doc_number": "武大[2000]25号",
+        }]), \
              patch("policy.abolition.find_policy_documents_by_normalized_title") as by_title:
             self.assertEqual(resolve_abolition_target("武汉大学财务管理办法", "武大[2000]25号"), "old_2000")
         by_title.assert_not_called()
@@ -413,7 +415,7 @@ class PolicyAbolitionStorageTests(unittest.TestCase):
                 policy_storage.storage.relational,
                 "execute",
                 side_effect=lambda sql, *_args, **_kwargs: statements.append(sql),
-            ), patch('storage.file_records._ensure_meta_tables'):
+            ), patch('storage.file_records._ensure_meta_tables'), patch.object(policy_storage, 'backfill_default_policy_validity'):
                 policy_storage.ensure_policy_tables()
         finally:
             policy_storage._POLICY_TABLES_READY = previous_ready

@@ -89,6 +89,7 @@ def build_batch_assertion_prompt(contexts: list[dict[str, Any]]) -> str:
 每条断言必须给出连续原文 evidence（clause_id、text、左闭右开 start/end）。action 必须包含 subject 和 predicate。
 可以从父条款补全省略主体，但必须标记 inferred_from_context=true 和 source_clause_id。不得拼接或改写证据。
 qualifiers 固定为 conditions、materials、deadline、amount、location、result、exceptions，没有内容时使用空数组或 null。
+conditions、materials、exceptions 必须是字符串数组，例如 ["因特殊情况"]，不能填写对象数组；deadline、amount、location、result 必须是字符串或 null。
 每条断言必须使用 kind、subject、predicate、object、receiver、modality、qualifiers、evidence 字段。
 kind 不能写成 assert_type 或 assertion_type；evidence 必须是对象，不能是数组；predicate 必须是含 text 的对象。
 断言示例：{{"kind":"action","subject":{{"text":"申请人","type":"person","inferred_from_context":false}},"predicate":{{"text":"提交","normalized":"提交"}},"object":{{"text":"申请表","type":"material"}},"receiver":null,"modality":"required","qualifiers":{{"conditions":[],"materials":[],"deadline":null,"amount":null,"location":null,"result":null,"exceptions":[]}},"evidence":{{"clause_id":"目标条款ID","text":"原文中连续片段","start":0,"end":8}}}}。

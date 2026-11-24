@@ -340,14 +340,23 @@ def _reset_file_database_artifacts(file_id: str, *, purge: bool = False, force: 
         "policy_clauses": 0,
     }
 
-    # 文本索引按文件独立建表，删除同一 file_id 的旧向量可避免重跑后重复命中。
+    # 同时清理共享表和遗留表，防止重跑重复或迁移恢复已重置的数据。
+    storage.relational.execute(
+        "SELECT pg_advisory_xact_lock(hashtext('pdf_text_file'), hashtext(%s))",
+        (normalized_file_id,),
+    )
     text_index_name = f"pdf_{normalized_file_id}_text"
     deleted_vectors = _ignore_missing_table(
         lambda: storage.vector.delete_vectors_by_metadata(
             text_index_name, "file_id", normalized_file_id
         )
     )
-    summary["text_vectors"] = int(deleted_vectors or 0)
+    shared_deleted = _ignore_missing_table(
+        lambda: storage.vector.delete_vectors_by_metadata(
+            "pdf_text_chunks", "file_id", normalized_file_id
+        )
+    )
+    summary["text_vectors"] = int(deleted_vectors or 0) + int(shared_deleted or 0)
 
     table_artifacts = _load_table_artifacts(normalized_file_id)
     for artifact in table_artifacts:
@@ -477,8 +486,8 @@ def _reset_file_database_artifacts(file_id: str, *, purge: bool = False, force: 
             metadata = {"structure_status": "pending", "parse_quality": 0.0}
             if purge:
                 # 保留稳定标识和源文件定位，清除旧版本推断出的制度元数据。
-                cleared = {"title": "", "notice_title": "", "doc_number": "", "doc_number_raw": "", "issuing_department": "", "version": "",
-                           "structure_version": "", "issue_date": None, "effective_date": None,
+                cleared = {"title": "", "notice_title": "", "doc_number": "", "doc_number_raw": "", "issuing_department": "", "applicable_unit": [], "version": "",
+                           "structure_version": "", "issue_date": None, "issue_month": None, "effective_date": None,
                            "expiry_date": None, "validity_status": "unknown", "family_id": None,
                            "current_extraction_run_id": None}
                 metadata.update({key: value for key, value in cleared.items() if key in policy_record})

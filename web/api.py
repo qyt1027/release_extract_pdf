@@ -130,13 +130,11 @@ async def search_text(
     # 生成查询向量
     query_vector = model.encode([q], normalize_embeddings=True)[0].tolist()
 
-    # 搜索
-    if file_id:
-        index_name = f"pdf_{file_id}_text"
-        results = storage.vector.search(index_name, query_vector, top_k)
-    else:
-        # 跨文件搜索暂不支持
-        results = []
+    from storage.text_chunks import TextChunkStore
+    try:
+        results = TextChunkStore().search(query_vector, top_k, file_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     return JSONResponse(content={"results": results, "query": q})
 
@@ -232,6 +230,26 @@ async def list_policy_catalog(
     from policy.web_catalog import list_policies
 
     return list_policies(q, status, limit, offset)
+
+
+@app.get("/api/policies/{policy_id}/relations")
+async def get_policy_relations(
+    policy_id: str,
+    depth: int = Query(1, ge=1, le=3),
+    direction: str = Query("both", pattern="^(both|incoming|outgoing)$"),
+    limit: int = Query(100, ge=1, le=200),
+):
+    """读取文件关系及原文证据；关联路径不用于自动推断效力。"""
+    from policy.document_graph import query_document_graph
+
+    try:
+        return await run_in_threadpool(query_document_graph, policy_id, depth, direction, limit)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="制度不存在") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="文件关系图谱暂不可用") from exc
 
 
 @app.get("/api/policies/{policy_id}")

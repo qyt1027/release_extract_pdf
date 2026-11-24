@@ -36,6 +36,7 @@ Thumbs.db
 *.log
 /tmp/
 /outputs/
+/evaluation_results/
 *_条款重组结果.json
 
 # 本地原始资料与抽样导出，仅忽略项目根目录对应文件
@@ -44,7 +45,7 @@ Thumbs.db
 /test_pdf/
 /V2*.csv
 
-# 私钥、证书、数据库备份与本地发布临时文件
+# 私钥、数据库备份与本地发布临时文件
 *.pem
 *.key
 *.p12
@@ -60,3 +61,4 @@ Thumbs.db
 *.bak-*
 /release-preparation/
 /.test-tmp/
+/evaluation_results/

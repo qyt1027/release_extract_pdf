@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 import re
+from core.unit_aliases import applicable_unit_paths, normalize_applicable_units
+
 from datetime import date
 from typing import Any
 
@@ -102,6 +104,7 @@ def select_answer_evidence(
             continue
         document_counts[policy_id] = document_counts.get(policy_id, 0) + 1
         seen_clauses.add(clause_id)
+        units = normalize_applicable_units(document.get("applicable_unit", metadata.get("applicable_unit")))
         selected.append({
             "evidence_id": f"E{len(selected) + 1}",
             "policy_id": policy_id,
@@ -109,6 +112,8 @@ def select_answer_evidence(
             "title": str(document.get("title") or metadata.get("title") or ""),
             "file_id": str(document.get("file_id") or metadata.get("file_id") or ""),
             "file_name": str(document.get("file_name") or metadata.get("file_name") or ""),
+            "applicable_unit": units,
+            "applicable_unit_paths": applicable_unit_paths(units),
             "chapter_path": list(metadata.get("chapter_path") or []),
             "clause_no": " ".join(
                 str(metadata.get(name) or "").strip()
@@ -198,6 +203,7 @@ def _build_answer_prompt(question: str, as_of: str, evidence: list[dict[str, Any
     payload = [{
         "evidence_id": item["evidence_id"],
         "policy_title": item["title"],
+        "applicable_unit": item.get("applicable_unit", []),
         "clause_no": item["clause_no"],
         "page_start": item["page_start"],
         "temporal_status": item["temporal_status"],
@@ -218,6 +224,7 @@ def _build_answer_prompt(question: str, as_of: str, evidence: list[dict[str, Any
 引用只能填写上面存在的 evidence_id。related_clauses 是同一制度的父子条款原文，必须结合它理解标题下的具体要求；使用其中内容时引用所属 evidence_id。若 hierarchy_context_truncated 为 true，不得宣称已列出全部要求。日期未知证据不能单独支撑确定结论；证据不足时输出 undetermined。
 相关条款效力待核实时，仍应引用并说明文件原文规定，同时明确效力待核实，不得将其说成没有相关条款。
 区分制度生效日期与入学年级等适用条件，不得从文号年份或适用年级推算生效日期。
+适用单位为具体学院的制度不能推广到其他学院；适用单位为空表示尚未确定，不能视为全校通用。
 """
 
 
@@ -286,6 +293,9 @@ def answer_policy_question(
     question: str,
     requested_as_of: str | None = None,
     today: date | None = None,
+    *,
+    use_knowledge_v2: bool = True,
+    knowledge_index_name: str | None = None,
 ) -> dict[str, Any]:
     """检索多份制度的条款证据，并生成经过引用校验的初步回答。"""
     question = str(question or "").strip()
@@ -300,9 +310,19 @@ def answer_policy_question(
 
     as_of = str(resolved["as_of"])
     candidates = search_indexed_policy_clauses(question, top_k=20, as_of=as_of)
-    from policy.knowledge_v2.retrieval import enhance_clause_candidates_v2
+    knowledge_info = {
+        "retrieval_mode": "clause_only", "matched_assertions": [],
+        "matched_matter": None, "workflow_summary": None,
+    }
+    if use_knowledge_v2:
+        from policy.knowledge_v2.retrieval import enhance_clause_candidates_v2
 
-    candidates, knowledge_info = enhance_clause_candidates_v2(question, candidates, as_of)
+        if knowledge_index_name:
+            candidates, knowledge_info = enhance_clause_candidates_v2(
+                question, candidates, as_of, knowledge_index_name=knowledge_index_name,
+            )
+        else:
+            candidates, knowledge_info = enhance_clause_candidates_v2(question, candidates, as_of)
     evidence = select_answer_evidence(candidates)
     warnings = list(candidates[0].get("temporal_warnings") or []) if candidates else []
     if not evidence:

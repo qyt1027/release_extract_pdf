@@ -86,3 +86,7 @@ class PolicyAPIClient:
             data["as_of"] = as_of
         return await self._request("POST", "policy-answer", data=data, read_timeout=180.0)
 
+    async def get_policy_relations(self, policy_id: str, depth: int = 1, direction: str = "both", limit: int = 100) -> dict:
+        return await self._request("GET", f"api/policies/{quote(policy_id, safe='')}/relations",
+                                   params={"depth": depth, "direction": direction, "limit": limit})
+

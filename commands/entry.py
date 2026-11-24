@@ -9,6 +9,9 @@ from core.paths import ENV_FILE, PROJECT_ROOT
 from .arguments import build_parser, print_core_help, validate_args
 from .handlers import (
     run_api,
+    run_migrate_text_chunks,
+    run_normalize_applicable_units,
+    run_rebuild_file_text,
     run_batch_status,
     run_classify_policy_clauses,
     run_classify_policy_process_batch,
@@ -66,7 +69,13 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     selected_domains = validate_args(parser, args)
 
-    if args.process_dir:
+    if args.rebuild_file_text:
+        run_rebuild_file_text(args.rebuild_file_text, source_path=args.text_source)
+    elif args.normalize_applicable_units:
+        run_normalize_applicable_units(dry_run=args.unit_normalization_dry_run)
+    elif args.migrate_text_chunks:
+        run_migrate_text_chunks(dry_run=args.text_migration_dry_run, legacy_model=args.legacy_embedding_model)
+    elif args.process_dir:
         run_process_dir(args.process_dir, backend=args.backend)
     elif args.reset_file:
         run_reset_file(args.reset_file)

@@ -47,8 +47,11 @@ class CloudMinerUClient:
         if self._client is None:
             headers = {}
             # v4 需要 Authorization，agent 不需要
-            if self.mode == "v4" and self.config.batch_api_key:
-                headers["Authorization"] = f"Bearer {self.config.batch_api_key}"
+            if self.mode == "v4":
+                api_key = self.config.batch_api_key.strip()
+                if not api_key:
+                    raise ValueError("使用 CloudMinerU v4 后端时必须配置 CLOUDMINERU_API_KEY")
+                headers["Authorization"] = f"Bearer {api_key}"
             self._client = httpx.Client(
                 base_url=self.base_url,
                 headers=headers,

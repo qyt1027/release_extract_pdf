@@ -7,6 +7,8 @@ from typing import Any
 
 import jieba
 from rank_bm25 import BM25Okapi
+from metadata.policy_scope import query_applicable_units
+from core.unit_aliases import applicable_unit_paths, normalize_applicable_units, normalize_unit_query
 
 
 _bm25_documents: list[dict[str, Any]] = []
@@ -70,7 +72,7 @@ def _get_bm25_index_snapshot() -> tuple[BM25Okapi | None, list[dict[str, Any]]]:
         return _bm25_index, list(_bm25_documents)
 
 
-_SEARCHABLE_LEVELS = frozenset({"article", "paragraph", "item"})
+_SEARCHABLE_LEVELS = frozenset({"article", "paragraph", "item", "appendix"})
 _QUERY_PUNCTUATION = re.compile(r"[^\u4e00-\u9fffA-Za-z0-9]+")
 POLICY_CLAUSE_INDEX_NAME = "policy_clause_search"
 
@@ -91,12 +93,16 @@ def is_searchable_policy_clause(clause: dict[str, Any]) -> bool:
     )
 
 
-def build_clause_index_text(clause: dict[str, Any]) -> str:
-    """组合章节、条款号和原文，给向量模型保留制度上下文。"""
+def build_clause_index_text(clause: dict[str, Any], document: dict[str, Any] | None = None) -> str:
+    """组合制度标题、适用单位和条款内容，原文证据保持独立。"""
     chapter_path = clause.get("chapter_path") or []
     if not isinstance(chapter_path, list):
         chapter_path = []
-    parts = [str(item).strip() for item in chapter_path if str(item).strip()]
+    document = document or {}
+    title = str(document.get("title") or "").strip()
+    parts = [title] if title else []
+    parts.extend(normalize_applicable_units(document.get("applicable_unit")))
+    parts.extend(str(item).strip() for item in chapter_path if str(item).strip())
     parts.extend(
         str(clause.get(field) or "").strip()
         for field in ("article_no", "paragraph_no", "item_no")
@@ -120,6 +126,7 @@ def build_clause_metadata(
         "file_id": str(document.get("file_id") or ""),
         "file_name": str(document.get("file_name") or ""),
         "title": str(document.get("title") or document.get("file_name") or ""),
+        "applicable_unit": normalize_applicable_units(document.get("applicable_unit")),
         "level": str(clause.get("level") or ""),
         "parent_clause_id": clause.get("parent_clause_id"),
         "article_no": str(clause.get("article_no") or ""),
@@ -129,13 +136,31 @@ def build_clause_metadata(
         "page_start": int(clause.get("page_start") or 0),
         "page_end": int(clause.get("page_end") or clause.get("page_start") or 0),
         "raw_text": str(clause.get("raw_text") or ""),
-        "search_text": build_clause_index_text(clause),
+        "search_text": build_clause_index_text(clause, document),
         "structure_version": str(clause.get("structure_version") or ""),
     }
 
 
 def _normalize_query(text: str) -> str:
     return _QUERY_PUNCTUATION.sub("", str(text or "")).lower()
+
+
+def filter_candidates_by_applicable_unit(
+    query: str, candidates: list[dict[str, Any]], known_units: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    """明确询问学院时保留对应学院及全校制度，未知范围不能当作全校。"""
+    def units_of(candidate: dict[str, Any]) -> list[str]:
+        document = candidate.get("policy_document") or {}
+        metadata = candidate.get("metadata") or {}
+        return normalize_applicable_units(document.get("applicable_unit", metadata.get("applicable_unit")))
+
+    candidate_units = [units_of(candidate) for candidate in candidates]
+    units = {unit for units in candidate_units for unit in units} | (known_units or set())
+    targets = query_applicable_units(query, units)
+    if not targets:
+        return list(candidates)
+    allowed = targets | {"全校"}
+    return [candidate for candidate, units in zip(candidates, candidate_units) if allowed.intersection(units)]
 
 
 def _query_terms(query: str) -> set[str]:
@@ -164,7 +189,7 @@ def _keyword_score(query: str, search_text: str) -> float:
 def search_policy_clauses_bm25(
     query: str, top_k: int = 50,
 ) -> list[dict[str, Any]]:
-    query = str(query or "").strip()
+    query = normalize_unit_query(str(query or "").strip())
     if not query:
         raise ValueError("检索问题不能为空")
     if not 1 <= top_k <= 100:
@@ -179,8 +204,10 @@ def search_policy_clauses_bm25(
         return []
 
     scores = index.get_scores(query_tokens)
+    eligible = filter_candidates_by_applicable_unit(query, documents)
+    eligible_ids = {id(document) for document in eligible}
     top_indices = sorted(
-        range(len(scores)),
+        (index for index, document in enumerate(documents) if id(document) in eligible_ids),
         key=lambda index: (float(scores[index]), -index),
         reverse=True,
     )[:top_k]
@@ -284,6 +311,7 @@ def build_policy_search_response(
     for rank, candidate in enumerate(candidates, start=1):
         metadata = dict(candidate.get("metadata") or {})
         document = dict(candidate.get("policy_document") or {})
+        units = normalize_applicable_units(document.get("applicable_unit", metadata.get("applicable_unit")))
         results.append({
             "rank": rank,
             "score": float(candidate.get("score", candidate.get("similarity", 0.0)) or 0.0),
@@ -296,6 +324,8 @@ def build_policy_search_response(
                 "file_id": str(metadata.get("file_id") or ""),
                 "title": str(metadata.get("title") or ""),
                 "file_name": str(metadata.get("file_name") or ""),
+                "applicable_unit": units,
+                "applicable_unit_paths": applicable_unit_paths(units),
                 "family_id": str(document.get("family_id") or ""),
                 "effective_date": str(document.get("effective_date") or ""),
                 "expiry_date": str(document.get("expiry_date") or ""),
@@ -349,7 +379,7 @@ def sync_policy_clause_index(policy_id: str) -> int:
         clause for clause in get_policy_clauses(policy_id)
         if is_searchable_policy_clause(clause)
     ]
-    texts = [build_clause_index_text(clause) for clause in clauses]
+    texts = [build_clause_index_text(clause, document) for clause in clauses]
     metadata = [build_clause_metadata(clause, document) for clause in clauses]
 
     # 先完成真实嵌入，避免模型故障时提前删除可用的旧索引。
@@ -495,35 +525,8 @@ def load_policy_clauses_for_bm25() -> list[dict[str, Any]]:
         ):
             continue
 
-        chapter_path = clause.get("chapter_path") or []
-        if not isinstance(chapter_path, list):
-            chapter_path = []
-        search_text = str(clause.get("search_text") or "").strip()
-        if not search_text:
-            search_text = build_clause_index_text(clause)
-        metadata = {
-            "clause_id": str(clause.get("clause_id") or ""),
-            "policy_id": policy_id,
-            "file_id": str(policy_document.get("file_id") or ""),
-            "file_name": str(policy_document.get("file_name") or ""),
-            "title": str(
-                policy_document.get("title")
-                or policy_document.get("file_name")
-                or ""
-            ),
-            "level": str(clause.get("level") or ""),
-            "article_no": str(clause.get("article_no") or ""),
-            "paragraph_no": str(clause.get("paragraph_no") or ""),
-            "item_no": str(clause.get("item_no") or ""),
-            "chapter_path": list(chapter_path),
-            "page_start": int(clause.get("page_start") or 0),
-            "page_end": int(
-                clause.get("page_end") or clause.get("page_start") or 0
-            ),
-            "raw_text": str(clause.get("raw_text") or ""),
-            "search_text": search_text,
-            "structure_version": str(clause.get("structure_version") or ""),
-        }
+        metadata = build_clause_metadata(clause, policy_document)
+        search_text = metadata["search_text"]
         documents.append({
             "clause_id": metadata["clause_id"],
             "search_text": search_text,
@@ -682,7 +685,7 @@ def search_indexed_policy_clauses(
     query: str, top_k: int = 10, as_of: str | None = None
 ) -> list[dict[str, Any]]:
     """在全局真实条款索引中召回并重排可引用的制度条款。"""
-    query = str(query or "").strip()
+    query = normalize_unit_query(str(query or "").strip())
     if not query:
         raise ValueError("检索问题不能为空")
     if not 1 <= top_k <= 20:
@@ -721,6 +724,11 @@ def search_indexed_policy_clauses(
             top_k=candidate_top_k,
         )
 
+        with _bm25_lock:
+            known_units = {unit for row in _bm25_documents
+                           for unit in normalize_applicable_units((row.get("metadata") or {}).get("applicable_unit"))}
+        vector_candidates = filter_candidates_by_applicable_unit(query, vector_candidates, known_units)
+        bm25_candidates = filter_candidates_by_applicable_unit(query, bm25_candidates, known_units)
         candidates = rrf_fusion(
             vector_candidates,
             bm25_candidates,

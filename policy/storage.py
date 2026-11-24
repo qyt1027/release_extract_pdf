@@ -85,7 +85,9 @@ def ensure_policy_tables() -> None:
             title TEXT NOT NULL DEFAULT '',
             doc_number TEXT NOT NULL DEFAULT '',
             issuing_department TEXT NOT NULL DEFAULT '',
+            applicable_unit TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
             issue_date DATE,
+            issue_month VARCHAR(7),
             effective_date DATE,
             expiry_date DATE,
             validity_status VARCHAR(20) NOT NULL DEFAULT 'current'
@@ -102,13 +104,44 @@ def ensure_policy_tables() -> None:
     )
     storage.relational.execute(
         f'ALTER TABLE "{TABLE_POLICY_DOCUMENTS}" ADD COLUMN IF NOT EXISTS '
+        '"applicable_unit" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]'
+    )
+    # 就地转换开发库中的单值字段，保留原有制度的适用范围。
+    storage.relational.execute(
+        f'''DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM pg_attribute
+                WHERE attrelid = '"{TABLE_POLICY_DOCUMENTS}"'::regclass
+                  AND attname = 'applicable_unit' AND atttypid = 'text'::regtype
+            ) THEN
+                LOCK TABLE "{TABLE_POLICY_DOCUMENTS}" IN ACCESS EXCLUSIVE MODE;
+                IF EXISTS (
+                    SELECT 1 FROM pg_attribute
+                    WHERE attrelid = '"{TABLE_POLICY_DOCUMENTS}"'::regclass
+                      AND attname = 'applicable_unit' AND atttypid = 'text'::regtype
+                ) THEN
+                    ALTER TABLE "{TABLE_POLICY_DOCUMENTS}" ALTER COLUMN applicable_unit DROP DEFAULT;
+                    ALTER TABLE "{TABLE_POLICY_DOCUMENTS}" ALTER COLUMN applicable_unit TYPE TEXT[]
+                        USING CASE WHEN btrim(applicable_unit) = '' THEN ARRAY[]::TEXT[]
+                                   ELSE ARRAY[applicable_unit] END;
+                    ALTER TABLE "{TABLE_POLICY_DOCUMENTS}" ALTER COLUMN applicable_unit
+                        SET DEFAULT ARRAY[]::TEXT[];
+                END IF;
+            END IF;
+        END;
+        $$'''
+    )
+    storage.relational.execute(
+        f'ALTER TABLE "{TABLE_POLICY_DOCUMENTS}" ADD COLUMN IF NOT EXISTS '
         f'"family_id" VARCHAR(96) REFERENCES "{TABLE_POLICY_FAMILIES}"(family_id)'
     )
     # 原单制度记录使用空键，保持已有 ID；同一文件的其他制度独立使用稳定键。
     storage.relational.execute(f'''ALTER TABLE "{TABLE_POLICY_DOCUMENTS}"
         ADD COLUMN IF NOT EXISTS document_key TEXT NOT NULL DEFAULT '',
         ADD COLUMN IF NOT EXISTS source_page_start INTEGER,
-        ADD COLUMN IF NOT EXISTS source_page_end INTEGER''')
+        ADD COLUMN IF NOT EXISTS source_page_end INTEGER,
+        ADD COLUMN IF NOT EXISTS issue_month VARCHAR(7)''')
     storage.relational.execute(f'ALTER TABLE "{TABLE_POLICY_DOCUMENTS}" DROP CONSTRAINT IF EXISTS policy_documents_file_id_key')
     storage.relational.execute(f'CREATE UNIQUE INDEX IF NOT EXISTS policy_documents_file_document_key_idx '
                                f'ON "{TABLE_POLICY_DOCUMENTS}" (file_id, document_key)')
@@ -135,6 +168,7 @@ def ensure_policy_tables() -> None:
             page_start INTEGER NOT NULL DEFAULT 0,
             page_end INTEGER NOT NULL DEFAULT 0,
             bboxes JSONB NOT NULL DEFAULT '[]'::jsonb,
+            tables JSONB NOT NULL DEFAULT '[]'::jsonb,
             confidence DOUBLE PRECISION NOT NULL DEFAULT 0,
             content_hash VARCHAR(64) NOT NULL DEFAULT '',
             sequence_no INTEGER NOT NULL DEFAULT 0,
@@ -151,6 +185,10 @@ def ensure_policy_tables() -> None:
     storage.relational.execute(
         f'ALTER TABLE "{TABLE_POLICY_CLAUSES}" ADD COLUMN IF NOT EXISTS '
         f'"is_active" BOOLEAN NOT NULL DEFAULT TRUE'
+    )
+    storage.relational.execute(
+        f'ALTER TABLE "{TABLE_POLICY_CLAUSES}" ADD COLUMN IF NOT EXISTS '
+        f'"tables" JSONB NOT NULL DEFAULT \'[]\'::jsonb'
     )
     storage.relational.execute(
         f'''CREATE TABLE IF NOT EXISTS "{TABLE_POLICY_RUNS}" (
@@ -554,6 +592,7 @@ def ensure_policy_tables() -> None:
               ON target."policy_id" = relation."target_policy_id"'''
     )
     for table, index, columns in (
+        (TABLE_POLICY_DOCUMENTS, "policy_documents_duplicate_title_idx", "regexp_replace(title, '[[:space:]]', '', 'g')"),
         (TABLE_POLICY_CLAUSES, "policy_clauses_policy_idx", "policy_id, sequence_no"),
         (TABLE_POLICY_DOCUMENT_RELATIONS, "policy_document_relations_source_idx", "source_policy_id, review_status"),
         (TABLE_POLICY_ITEMS, "policy_extraction_items_run_idx", "run_id, status"),
@@ -629,13 +668,15 @@ def upsert_policy_document(
     from metadata.document_number import display_document_number
     doc_number_raw = str(metadata.get("doc_number_raw") or metadata.get("doc_number") or "")
     original_pdf_url = str(metadata.get("original_pdf_url") or f"pdf/{file_id}.pdf")
+    issue_date = _parse_date(metadata.get("issue_date"))
+    from core.unit_aliases import normalize_applicable_units
     storage.relational.execute(
         f'''INSERT INTO "{TABLE_POLICY_DOCUMENTS}"
             (policy_id, file_id, file_name, title, notice_title, doc_number, doc_number_raw, issuing_department,
              issue_date, effective_date, expiry_date, validity_status, version,
              original_pdf_url, parse_quality, structure_status, structure_version,
-             document_key, source_page_start, source_page_end)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+             document_key, source_page_start, source_page_end, applicable_unit, issue_month)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (file_id, document_key) DO UPDATE SET
                 file_name = EXCLUDED.file_name,
                 title = EXCLUDED.title,
@@ -643,7 +684,9 @@ def upsert_policy_document(
                 doc_number = EXCLUDED.doc_number,
                 doc_number_raw = EXCLUDED.doc_number_raw,
                 issuing_department = EXCLUDED.issuing_department,
+                applicable_unit = EXCLUDED.applicable_unit,
                 issue_date = EXCLUDED.issue_date,
+                issue_month = EXCLUDED.issue_month,
                 effective_date = CASE WHEN EXCLUDED.source_page_start IS NOT NULL THEN EXCLUDED.effective_date
                     ELSE COALESCE("{TABLE_POLICY_DOCUMENTS}".effective_date, EXCLUDED.effective_date) END,
                 expiry_date = CASE WHEN EXCLUDED.source_page_start IS NOT NULL THEN EXCLUDED.expiry_date
@@ -670,7 +713,7 @@ def upsert_policy_document(
             display_document_number(str(metadata.get("doc_number") or "")),
             doc_number_raw,
             str(metadata.get("issuer") or metadata.get("issuing_department") or ""),
-            _parse_date(metadata.get("issue_date")),
+            issue_date,
             _parse_date(metadata.get("effective_date")),
             _parse_date(metadata.get("expiry_date")),
             PolicyValidityStatus.CURRENT.value,
@@ -682,6 +725,8 @@ def upsert_policy_document(
             document_key,
             metadata.get("source_page_start"),
             metadata.get("source_page_end"),
+            normalize_applicable_units(metadata.get("applicable_unit")),
+            None if issue_date else metadata.get("issue_month") or None,
         ),
     )
     return policy_id
@@ -729,9 +774,9 @@ def replace_policy_clauses(
                 (clause_id, policy_id, parent_clause_id, level, chapter_path,
                  article_no, paragraph_no, item_no, raw_text, search_text,
                  page_start, page_end, bboxes, confidence, content_hash,
-                 sequence_no, structure_version, is_active)
+                 sequence_no, structure_version, is_active, tables)
                 VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s,
-                        %s, %s, %s::jsonb, %s, %s, %s, %s, TRUE)
+                        %s, %s, %s::jsonb, %s, %s, %s, %s, TRUE, %s::jsonb)
                 ON CONFLICT (clause_id) DO UPDATE SET
                     parent_clause_id = EXCLUDED.parent_clause_id,
                     level = EXCLUDED.level,
@@ -744,6 +789,7 @@ def replace_policy_clauses(
                     page_start = EXCLUDED.page_start,
                     page_end = EXCLUDED.page_end,
                     bboxes = EXCLUDED.bboxes,
+                    tables = EXCLUDED.tables,
                     confidence = EXCLUDED.confidence,
                     content_hash = EXCLUDED.content_hash,
                     sequence_no = EXCLUDED.sequence_no,
@@ -767,6 +813,7 @@ def replace_policy_clauses(
                 clause.content_hash,
                 clause.sequence_no,
                 clause.structure_version,
+                json.dumps(clause.tables, ensure_ascii=False),
             ),
         )
     storage.relational.update_rows(

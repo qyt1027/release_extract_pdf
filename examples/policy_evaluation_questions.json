@@ -1,0 +1,16 @@
+[
+  {"id":"q01","group":"宿舍更换","question":"如何申请更换宿舍？","references":[]},
+  {"id":"q02","group":"q02","question":"本科生新生奖学金申请条件是什么？","references":[{"title":"武汉大学本科学生奖学金管理办法","locators":["第三条","第五条","第六条","第七条"]}]},
+  {"id":"q03","group":"q03","question":"研究生新生奖学金有多少钱？","references":[]},
+  {"id":"q04","group":"q04","question":"福利费的适用对象是什么，需要自己申请吗？","references":[{"title":"武汉大学福利费管理办法（修订）","locators":["三、福利费使用对象和范围","六、福利费使用审批程序"]}]},
+  {"id":"q05","group":"q05","question":"少数民族学生需要参加四六级考试吗？","references":[{"title":"武汉大学少数民族学生学籍管理暂行办法","locators":["第六条"]}]},
+  {"id":"q06","group":"q06","question":"我想申请学费减免，需要满足什么条件？","references":[{"title":"武汉大学学生学费减免和临时困难补助管理条例","locators":["第三条"]}]},
+  {"id":"q07","group":"q07","question":"学生证丢了怎么办？","references":[{"title":"武汉大学学生证和校徽管理办法","locators":["第六条"]}]},
+  {"id":"q08","group":"q08","question":"助管工资有多少，多久能发？","references":[{"title":"武汉大学研究生助管岗位管理实施细则","locators":["第九条","第十四条","第十七条"]}]},
+  {"id":"q09","group":"q09","question":"在职员工想报考研究生学费谁出？","references":[{"title":"武汉大学在职人员报考研究生暂行办法","locators":["一、报考在职研究生（七）"]}]},
+  {"id":"q10","group":"q10","question":"考试作弊的处分是什么？","references":[{"title":"武汉大学学生纪律处分办法","locators":["第二十一条"]}]},
+  {"id":"q11","group":"宿舍更换","question":"怎么才能申请换宿舍？","references":[{"title":"武汉大学学生住宿管理办法","locators":["第十条"]}]},
+  {"id":"q12","group":"q12","question":"公务接待吃饭的标准是什么？","references":[{"title":"武汉大学国内公务接待管理实施办法","locators":["第十三条"]}]},
+  {"id":"q13","group":"q13","question":"怎么申请退学？","references":[]},
+  {"id":"q14","group":"q14","question":"怎么申请更换研究生导师？","references":[]}
+]

@@ -14,6 +14,12 @@ from pathlib import Path
 from typing import Any, Optional
 
 from core.models import BlockType, ContentBlock, PolicyClause, PolicyStructureStatus, ReviewItem
+from core.policy_signatures import (
+    is_policy_closing_heading,
+    policy_closing_provisions_start,
+    policy_footer_size,
+    policy_terminal_date,
+)
 from .storage import (
     insert_review_item,
     mark_policy_structure_failed,
@@ -32,20 +38,12 @@ _SECTION_RE = re.compile(rf"^第\s*({_NUMBER})\s*节[：:、.\s]*(.*)$", re.S)
 _ARTICLE_RE = re.compile(rf"^第\s*({_NUMBER})\s*条(?!款)[：:、.\s]*(.*)$", re.S)
 _ARTICLE_INLINE_RE = re.compile(rf"(?<!\S)(?:\*\*|__)?(第\s*{_NUMBER}\s*条)(?!款)")
 _LEADING_BOLD_RE = re.compile(r"^(\*\*|__)(.+?)\1")
-_PUBLICATION_FOOTER_RE = re.compile(
-    r"[\u4e00-\u9fffA-Za-z（）()·]{2,60}(?:办公室|办公厅|秘书处)"
-    r"(?:主动公开|依申请公开|不予公开|不公开)?"
-    r"[12]\d{3}年\d{1,2}月\d{1,2}日印(?:制|发)[。.]?"
+_PAREN_ITEM_RE = re.compile(rf"^[（(]\s*({_NUMBER})\s*[）)]\s*(?:[：:、.]\s*)?(.*)$", re.S)
+_APPENDIX_RE = re.compile(
+    rf"^((?:附件|附表|附录)(?:\s*{_NUMBER})?)(?:(?:[：:、.．\s]+|(?=[《〈]))(.*))?$"
 )
-_DATED_SIGNATURE_RE = re.compile(
-    r"(?!由|本规定|本办法|根据)(?!.*(?:负责|应当|必须))"
-    r"[\u4e00-\u9fffA-Za-z（）()·]{2,60}"
-    r"(?:委员会|大学|学院|学校|办公室|办公厅|秘书处)"
-    r"[12]\d{3}年\d{1,2}月\d{1,2}日[。.]?"
-)
-_PAREN_ITEM_RE = re.compile(r"^[（(]([^）)]+)[）)]\s*(?:[：:、.]\s*)?(.*)$", re.S)
 _CN_ITEM_RE = re.compile(r"^([一二三四五六七八九十百千万]+)、(?:\s*)(.*)$", re.S)
-_NUM_ITEM_RE = re.compile(r"^(\d+)[.、](?:\s*)(.*)$", re.S)
+_NUM_ITEM_RE = re.compile(r"^(\d+)(?:[.．](?!\d)|、)\s*(.*)$", re.S)
 _PARAGRAPH_RE = re.compile(rf"^第\s*({_NUMBER})\s*款(?:[：:、.\s]+(.*))?$", re.S)
 
 
@@ -63,6 +61,7 @@ class _ClauseDraft:
     page_start: int = 0
     page_end: int = 0
     bboxes: list[list[float]] = field(default_factory=list)
+    tables: list[dict] = field(default_factory=list)
     article_no: str = ""
     paragraph_no: str = ""
     item_no: str = ""
@@ -82,19 +81,23 @@ class _ClauseDraft:
         path: list[str] = []
         node: Optional[_ClauseDraft] = self
         while node:
-            if node.level in {"book", "chapter", "section"} and node.label:
-                path.append(node.label)
+            if node.level in {"book", "chapter", "section", "appendix"} and node.label:
+                heading = node.raw_parts[0] if node.raw_parts else ""
+                path.append(heading if heading and not heading.startswith("[表格]\n") else node.label)
             node = node.parent
         return list(reversed(path))
 
-    def append(self, text: str, page_num: int, bbox: Any = None) -> None:
+    def append(self, text: str, page_num: int, bbox: Any = None, table: Optional[dict] = None) -> None:
         text = str(text or "").strip()
         if not text:
             return
         self.raw_parts.append(text)
-        if not self.page_start:
+        if len(self.raw_parts) == 1:
             self.page_start = page_num or 0
         self.page_end = max(self.page_end, page_num or 0)
+        if table and not any(item['table_id'] == table['table_id'] for item in self.tables):
+            self.tables.append(table)
+            self.page_end = max(self.page_end, table['page_end'])
         if isinstance(bbox, (list, tuple)) and len(bbox) >= 4:
             try:
                 normalized = [float(v) for v in bbox[:4]]
@@ -125,6 +128,8 @@ def _html_to_text(value: str) -> str:
 def _lines_from_block(block: ContentBlock) -> list[str]:
     """按行处理文本块，并拆出同一块中紧邻的第X条标记。"""
     content = str(block.content or "").replace("\r\n", "\n")
+    if (block.raw or {}).get('structured_table'):
+        return [content] if content.strip() else []
     if block.type == BlockType.TABLE:
         table_text = _html_to_text(block.table_html or content)
         return [f"[表格]\n{table_text}".strip()] if table_text.strip() else []
@@ -166,6 +171,10 @@ def _marker(line: str) -> Optional[tuple[str, str, str]]:
             label_word = {"book": "编", "chapter": "章", "section": "节", "article": "条", "paragraph": "款"}[level]
             return level, f"第{number}{label_word}", remainder
 
+    match = _APPENDIX_RE.fullmatch(line)
+    if match:
+        return "appendix", "".join(match.group(1).split()), (match.group(2) or "").strip()
+
     match = _PAREN_ITEM_RE.match(line)
     if match:
         return "item", f"（{match.group(1).strip()}）", (match.group(2) or "").strip()
@@ -197,12 +206,13 @@ def _nearest_parent(
 ) -> Optional[_ClauseDraft]:
     """寻找新节点的最近合法父节点。"""
     allowed = {
-        "book": set(),
-        "chapter": {"book"},
-        "section": {"book", "chapter"},
-        "article": {"book", "chapter", "section"},
-        "paragraph": {"article"},
-        "item": {"article", "paragraph"},
+        "book": {"appendix"},
+        "chapter": {"book", "appendix"},
+        "section": {"book", "chapter", "appendix"},
+        "article": {"book", "chapter", "section", "appendix"},
+        "paragraph": {"article", "appendix"},
+        "item": {"article", "paragraph", "appendix"},
+        "appendix": set(),
         "preamble": set(),
     }
     node = current
@@ -211,7 +221,7 @@ def _nearest_parent(
     while scope and scope.level == "item":
         scope = scope.parent
     # 条、款内部统一使用编号层级；正式边界仍由原有章条规则管理。
-    nested_numbers = numbered_hierarchy or bool(scope and scope.level in {"article", "paragraph"})
+    nested_numbers = numbered_hierarchy or bool(scope and scope.level in {"article", "paragraph", "appendix"})
     while node:
         if rank is not None and node.level == "item":
             parent_rank = _numbered_item_rank(node.label)
@@ -223,6 +233,27 @@ def _nearest_parent(
             return node
         node = node.parent
     return None
+
+
+def _closing_footer_size(
+    lines: list[tuple[ContentBlock, str, tuple[str, str, str] | None]],
+    end: int,
+    *,
+    include_publication: bool = True,
+    include_standalone_date: bool = False,
+) -> int:
+    """识别边界前的落款和版记，也可识别整份正文末尾的独立日期。"""
+    texts = []
+    for index in range(end - 1, -1, -1):
+        block, text, marker = lines[index]
+        if block.type != BlockType.TEXT:
+            break
+        if marker and not (include_standalone_date and index == end - 1 and policy_terminal_date(text)):
+            break
+        texts.append(text)
+    return policy_footer_size(
+        texts[::-1], include_publication=include_publication, include_standalone_date=include_standalone_date,
+    )
 
 
 def build_policy_clauses(
@@ -237,35 +268,39 @@ def build_policy_clauses(
     ordered_blocks = [item for _, item in sorted(
         enumerate(blocks), key=lambda pair: (pair[1].page_num, pair[0])
     )]
-    prepared_blocks = [(block, _lines_from_block(block)) for block in ordered_blocks
-                       if block.type in {BlockType.TEXT, BlockType.TABLE}]
-    # 仅排除文末完整的印制版记或署名日期；保留原始块，不单凭日期或单位删正文。
-    # 单位、公开属性、日期和印制标记可能被解析为多个独立行。
-    tail_lines = [line for _, lines in prepared_blocks for line in lines][-6:]
-    for count in range(1, len(tail_lines) + 1):
-        footer = re.sub(r"\s+", "", "".join(tail_lines[-count:]))
-        footer = footer.replace("**", "").replace("__", "")
-        if not _marker(tail_lines[-count]) and (
-            _PUBLICATION_FOOTER_RE.fullmatch(footer) or _DATED_SIGNATURE_RE.fullmatch(footer)
-        ):
-            remaining = count
-            for _, lines in reversed(prepared_blocks):
-                removed = min(remaining, len(lines))
-                if removed:
-                    del lines[-removed:]
-                remaining -= removed
-                if not remaining:
-                    break
-            break
+    prepared_lines = [
+        (block, line, _marker(line))
+        for block in ordered_blocks if block.type in {BlockType.TEXT, BlockType.TABLE}
+        for line in _lines_from_block(block)
+    ]
+    footer_lines: set[int] = set()
+    implicit_appendices: set[int] = set()
+    appendix_after_footer: dict[tuple[str, str, str], int] = {}
+    for index, (block, _, marker) in enumerate(prepared_lines):
+        is_table = block.type == BlockType.TABLE
+        is_appendix = marker is not None and marker[0] == "appendix"
+        if not (is_table or is_appendix):
+            continue
+        size = _closing_footer_size(prepared_lines, index, include_publication=not is_table)
+        if not size:
+            continue
+        footer_lines.update(range(index - size, index))
+        if is_table:
+            implicit_appendices.add(index)
+        elif marker and marker[2]:
+            appendix_after_footer.setdefault(marker, index)
+    end = len(prepared_lines)
+    body_end = end - _closing_footer_size(prepared_lines, end, include_standalone_date=True)
+    footer_lines.update(range(body_end, end))
+    closing_start = policy_closing_provisions_start([text for _, text, _ in prepared_lines], body_end)
     # 正式章条制度继续使用原规则，仅为没有正式层级的编号文档补充父子关系。
     formal_levels = {"book", "chapter", "section", "article", "paragraph"}
     numbered_hierarchy = not any(
         marker and marker[0] in formal_levels
-        for _, lines in prepared_blocks for line in lines
-        for marker in [_marker(line)]
+        for _, _, marker in prepared_lines
     )
 
-    def create_node(level: str, label: str, remainder: str, block: ContentBlock) -> _ClauseDraft:
+    def create_node(level: str, label: str, remainder: str, block: ContentBlock, raw_line: str | None = None) -> _ClauseDraft:
         nonlocal sequence, current
         parent = _nearest_parent(current, level, label, numbered_hierarchy=numbered_hierarchy)
         sequence += 1
@@ -277,28 +312,53 @@ def build_policy_clauses(
             label=label,
             parent=parent,
         )
-        draft.article_no = label[1:-1] if level == "article" else (parent.article_no if parent else "")
-        if level == "paragraph":
-            draft.paragraph_no = label[1:-1]
-        if level == "item":
+        draft.article_no = label if level == "article" else (parent.article_no if parent else "")
+        draft.paragraph_no = label if level == "paragraph" else (parent.paragraph_no if parent else "")
+        if level in {"item", "appendix"}:
             draft.item_no = label
-        draft.append(f"{label} {remainder}".strip(), block.page_num, block.bbox)
+        draft.append(raw_line if raw_line is not None else remainder if level == "preamble"
+                     else f"{label} {remainder}".strip(), block.page_num, block.bbox,
+                     (block.raw or {}).get('structured_table'))
         drafts.append(draft)
         current = draft
         return draft
 
-    for block, lines in prepared_blocks:
-        for line in lines:
-            marker = _marker(line)
-            if marker:
-                level, label, remainder = marker
-                create_node(level, label, remainder, block)
-                continue
-
-            if current is None:
-                create_node("preamble", "前言", line, block)
-            else:
+    for index, (block, line, marker) in enumerate(prepared_lines):
+        if index in footer_lines:
+            continue
+        if index in implicit_appendices:
+            # “附表”仅用于引用定位，原文不添加不存在的标题。
+            create_node("appendix", "附表", "", block, raw_line="")
+        if marker:
+            level, label, remainder = marker
+            # 紧接正文大项的同名附件预告，由落款后的正式附件标题代表。
+            if index < appendix_after_footer.get(marker, index):
+                following = prepared_lines[index + 1][2]
+                if following and (
+                    following[0] in formal_levels
+                    or (following[0] == "item" and _numbered_item_rank(following[1]) == 1)
+                ):
+                    continue
+            # 附件说明紧接重复的“附件”封面标记时保留为同一附件。
+            if level == "appendix" and current and current.level == "appendix" and current.label == label and len(current.raw_parts) == 1:
                 current.append(line, block.page_num, block.bbox)
+                continue
+            create_node(level, label, remainder, block)
+            continue
+
+        if current is None:
+            create_node("preamble", "前言", line, block)
+        elif (
+            index == closing_start
+            and numbered_hierarchy
+            and current.level == "item"
+            and not current.chapter_path
+            and len(current.raw_parts) > 1
+            and not is_policy_closing_heading(current.raw_parts[0][len(current.label):])
+        ):
+            create_node("paragraph", "", "", block, raw_line=line)
+        else:
+            current.append(line, block.page_num, block.bbox, (block.raw or {}).get('structured_table'))
 
     clauses: list[PolicyClause] = []
     for draft in drafts:
@@ -309,7 +369,7 @@ def build_policy_clauses(
         search_text = " ".join(
             part for part in (prefix, draft.label, raw_text) if part
         ).strip()
-        confidence = 0.95 if draft.level in {"book", "chapter", "section", "article", "paragraph", "item"} else 0.75
+        confidence = 0.95 if draft.level in {"book", "chapter", "section", "article", "paragraph", "item", "appendix"} else 0.75
         clauses.append(
             PolicyClause(
                 clause_id=draft.clause_id,
@@ -325,6 +385,7 @@ def build_policy_clauses(
                 page_start=draft.page_start,
                 page_end=draft.page_end,
                 bboxes=draft.bboxes,
+                tables=draft.tables,
                 confidence=confidence,
                 content_hash=hashlib.sha256(raw_text.encode("utf-8")).hexdigest(),
                 sequence_no=draft.sequence_no,
@@ -409,15 +470,20 @@ def _guess_title(file_name: str, blocks: list[ContentBlock]) -> str:
 def structure_policy_file(
     file_id: str, file_name: str, blocks: list[ContentBlock],
     metadata: Optional[dict[str, Any]] = None, structure_version: str = STRUCTURE_VERSION,
+    *, parts: Optional[list[dict[str, Any]]] = None,
 ) -> dict[str, Any]:
     """拆分同一文件中的制度，分别建立条款、效力和检索索引。"""
-    from .document_parts import split_policy_document
-    parts = split_policy_document(blocks, dict(metadata or {}), file_name)
+    if parts is None:
+        from .document_parts import split_policy_document
+        parts = split_policy_document(blocks, dict(metadata or {}), file_name)
     old_relations = []
     if len(parts) > 1:
         from .storage import get_policy_documents_for_file
         from storage.adapters import storage
+        document_keys = {part['metadata'].get('document_key', '') for part in parts}
         for old in get_policy_documents_for_file(file_id):
+            if old.get('document_key', '') not in document_keys:
+                continue
             old_relations.extend(storage.relational.query(
                 'policy_document_relations', where='source_policy_id = %s',
                 params=(old['policy_id'],), limit=100000))

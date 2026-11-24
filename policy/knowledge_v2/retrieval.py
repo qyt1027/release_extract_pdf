@@ -103,15 +103,15 @@ def sync_assertion_index_v2(run_id: str) -> int:
     return count
 
 
-def search_assertions_v2(query: str, top_k: int = 20) -> list[dict[str, Any]]:
+def search_assertions_v2(query: str, top_k: int = 20, *, index_name: str = POLICY_ASSERTION_INDEX_V2) -> list[dict[str, Any]]:
     """搜索可用断言；索引不存在时由调用方降级。"""
     from policy.retrieval import _encode_policy_clause_texts
     from storage.adapters import storage
 
-    if storage.vector.count_vectors(POLICY_ASSERTION_INDEX_V2) < 1:
+    if storage.vector.count_vectors(index_name) < 1:
         raise RuntimeError("V2 断言索引为空")
     vector = _encode_policy_clause_texts([query])[0]
-    rows = storage.vector.search(POLICY_ASSERTION_INDEX_V2, vector, top_k=top_k)
+    rows = storage.vector.search(index_name, vector, top_k=top_k)
     results: list[dict[str, Any]] = []
     for row in rows:
         metadata = dict(row.get("metadata") or {})
@@ -253,13 +253,32 @@ def expand_matched_matter_candidates(
 
 def enhance_clause_candidates_v2(
     query: str, candidates: list[dict[str, Any]], as_of: str | None = None,
+    *, knowledge_index_name: str | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """最佳努力增强；任何 V2 故障都安全退回原条款顺序。"""
     try:
-        matches = search_assertions_v2(query)
+        from core.unit_aliases import normalize_applicable_units
+        from policy.retrieval import filter_candidates_by_applicable_unit
+
+        matches = search_assertions_v2(query, index_name=knowledge_index_name) if knowledge_index_name else search_assertions_v2(query)
+        known_units = {unit for item in candidates
+                       for unit in normalize_applicable_units((item.get("metadata") or {}).get("applicable_unit"))}
+        if "学院" in query or "全校" in query:
+            from policy.storage import get_policy_documents_by_ids
+
+            documents = get_policy_documents_by_ids([str(item.get("policy_id") or "") for item in matches])
+            scoped = filter_candidates_by_applicable_unit(query, [
+                {"metadata": documents.get(str(item.get("policy_id") or ""), {}), "match": item}
+                for item in matches
+            ], known_units)
+            matches = [item["match"] for item in scoped]
         expanded = expand_matched_matter_candidates(candidates, matches, as_of)
+        expanded = filter_candidates_by_applicable_unit(query, expanded, known_units)
         enhanced, info = merge_assertion_matches(expanded, matches)
         info.update(_load_match_context(matches))
+        info["knowledge_status"] = "matched" if matches else "no_matches"
         return enhanced, info
-    except Exception:
-        return merge_assertion_matches(candidates, [])
+    except Exception as exc:
+        original, info = merge_assertion_matches(candidates, [])
+        info.update(knowledge_status="failed", knowledge_error_type=type(exc).__name__)
+        return original, info

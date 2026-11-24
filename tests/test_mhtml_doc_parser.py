@@ -94,7 +94,8 @@ class MhtmlDocParserTests(unittest.TestCase):
             blocks = PDFParser(backend="pymupdf").parse(str(path))
 
         metadata = extract_document_metadata(blocks, "policy_regulation")
-        self.assertEqual(metadata["doc_number"], "武大采购字[2023]2号")
+        self.assertEqual(metadata["doc_number"], "武大采购字〔2023〕2号")
+        self.assertEqual(metadata["doc_number_raw"], "武大采购字[2023]2号")
         self.assertEqual(metadata["issuer"], "采购与招投标管理中心")
         self.assertNotIn("issue_date", metadata)
 

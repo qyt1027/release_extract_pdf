@@ -11,6 +11,7 @@ pydantic>=2.0.0
 
 # 文档解析与图片处理
 beautifulsoup4>=4.12.0
+legacy-doc==0.2.1
 pymupdf>=1.23.0
 Pillow>=10.0.0
 

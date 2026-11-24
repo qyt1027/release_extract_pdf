@@ -4,6 +4,9 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 import fitz
+from core.policy_titles import (
+    is_direct_policy_title, is_policy_issuance_notice_title, is_regulatory_title, normalize_policy_title, policy_title_subject,
+)
 
 
 @dataclass
@@ -17,9 +20,10 @@ class Signal:
 # 强信号冲突时的优先级（学术最优先，因其特征最独特）
 CATEGORY_PRIORITY = {
     "academic_paper": 1,
-    "policy_regulation": 2,
-    "admin_form": 3,
-    "contract": 4,
+    "other": 2,
+    "policy_regulation": 3,
+    "admin_form": 4,
+    "contract": 5,
 }
 
 
@@ -55,6 +59,7 @@ def classify_document(
     metadata = _extract_metadata(file_path)
     if source_metadata:
         metadata["source_doc_number"] = str(source_metadata.get("doc_number") or "")
+        metadata["source_title"] = str(source_metadata.get("title") or "")
 
     # 2. 规则引擎
     doc_type, confidence, reason, signals = _rule_based_classify(
@@ -65,7 +70,6 @@ def classify_document(
     if doc_type is None:
         doc_type = "other"
         confidence = 0.0
-        reason = "未触发任何有效分类信号"
 
     return {
         "doc_type": doc_type,
@@ -125,6 +129,116 @@ def _get_page_count(file_path: str) -> int:
 
 # ==================== 信号检测引擎 ====================
 
+_POLICY_SELF_REFERENCE = (
+    r'本(?:管理|实施|工作|操作|试行|暂行|补充){0,2}(?:办法|规定|制度|细则|条例|规则|章程|规程|标准|意见|方案)'
+)
+_LIMITED_SCOPE = r'(?:本次|此次|当次|该次|本届|本学期|本学年|本年度)'
+_DOCUMENT_NUMBER_PATTERN = (
+    r'[\u4e00-\u9fa5]{2,12}[ \t]*[〔\[［﹝【][ \t]*(?:19|20)\d{2}[ \t]*[〕\]］﹞】]'
+    r'[ \t]*\d+[ \t]*号'
+)
+# 依据只接受被替换的书名和紧随其后的文号，避免跳过正文中的转述或拟议措辞。
+_POLICY_CITATION = (
+    rf'《》(?:[ \t]*(?:[（(][ \t]*{_DOCUMENT_NUMBER_PATTERN}[ \t]*[）)]|{_DOCUMENT_NUMBER_PATTERN}))?'
+)
+_POLICY_ADOPTION_RE = re.compile(
+    r'(?:^|[，,。；;\n])[ \t]*'
+    rf'(?:(?:根据|依据|按照)\s*{_POLICY_CITATION}'
+    rf'(?:\s*(?:[、，,]|以及|及|和)\s*{_POLICY_CITATION})*\s*|'
+    r'(?:为|经)[^，,。；;：:\n]*(?=特|现))?'
+    # “方案”须结合本文件制定表述和多项执行要求，不能仅凭文件名裁决。
+    rf'(?:特|现|据此)?(?:制定|制订|修订|印发|发布)[ \t]*'
+    rf'(?:{_POLICY_SELF_REFERENCE}|(?:以下|如下)(?:实施|工作)?(?:意见|方案))'
+    r'[ \t]*(?=[。；;：:\n]|$)'
+)
+# 兼容“为规范……，学院制定了有关……规定”的叙述式制定表述。
+# 从段首核对本单位和可选的制定目的，避免把转述、拟议或学习要求当成制定行为。
+_POLICY_NARRATIVE_ADOPTION_RE = re.compile(
+    r'(?:^|\n)[ \t]*(?:为[^。；;：:\n]{1,200}[，,][ \t]*)?'
+    r'(?:本校|本院|学校|学院|本单位)(?:现|特|已)?(?:制定|制订|修订)了?[ \t]*'
+    r'(?:有关|关于)[^，,。；;：:\n《》〈〉“”]{1,80}'
+    r'(?:办法|规定|制度|细则|条例|规则|章程|规程|标准)[ \t]*(?=[，,。；;：:\n]|$)'
+)
+# 研究决定也可直接设定管理规则；须明确按一般情形处理，不能只凭“决定”二字。
+_POLICY_DECISION_RE = re.compile(
+    r'(?:^|\n)[ \t]*(?:为[^。；;：:\n]{1,200}[，,][ \t]*)?'
+    r'经(?:本校|本院|学校|学院|本单位)?(?:研究|讨论|审议)决定[，,][ \t]*'
+    r'对[^，,。；;：:\n]{0,60}(?:以下|下列)(?:情况|情形)[^，,。；;：:\n]{0,60}'
+    r'(?=[，,。；;：:\n]|$)'
+)
+_POLICY_SECTION_RE = re.compile(
+    r'(?m)^[ \t]*(?:#{1,6}[ \t]+)?(?:\*\*)?'
+    r'(?:[一二三四五六七八九十百\d]+[、.．]|[（(][一二三四五六七八九十百\d]+[）)]|'
+    r'第[一二三四五六七八九十百\d]+条)'
+)
+_POLICY_REQUIREMENT_RE = re.compile(
+    r'应当|不得|不允许|必须|须|严禁|方可|要求为|'
+    r'应(?:积极|在|于|按|由|向|提交|提供|履行|承担|符合|根据|及时)|'
+    r'需(?:要|经|由|根据|提交|提供|填写|在|于)'
+)
+_CHAPTER_ARTICLE_HEADING_RE = re.compile(
+    r'(?m)^[ \t]*(?:#{1,6}[ \t]*)?(?:\*\*)?[ \t]*第[ \t]*'
+    r'(?P<number>[零〇一二三四五六七八九十百千万\d][零〇一二三四五六七八九十百千万\d \t]*)'
+    r'(?P<kind>[章条])(?:\*\*)?'
+)
+
+
+def _count_body_chapters_and_articles(text: str) -> tuple[int, int]:
+    """按独立标题统计正文章条，排除引文、目录和重复编号。"""
+    main_text = re.sub(r'《[^》]*》|〈[^〉]*〉|“[^”]*”|「[^」]*」|『[^』]*』|"[^"\n]*"', '', text)
+    main_text = re.sub(r'(?m)^[ \t]*>[^\n]*', '', main_text)
+    headings = list(_CHAPTER_ARTICLE_HEADING_RE.finditer(main_text))
+    chapters, articles = set(), set()
+    for index, heading in enumerate(headings):
+        end = headings[index + 1].start() if index + 1 < len(headings) else len(main_text)
+        body = main_text[heading.end():end]
+        first_line = body.partition('\n')[0]
+        if re.search(r'[.．·…⋯]{2,}[ \t]*\d*[ \t]*$', first_line):
+            continue
+        number = ''.join(heading['number'].split())
+        if heading['kind'] == '章' and body.strip():
+            chapters.add(number)
+        elif heading['kind'] == '条' and re.search(r'[。；;！？!?]', body):
+            # 条款须有实际句子，不能把空编号或只有目录标题的条目算成正文。
+            articles.add(number)
+    return len(chapters), len(articles)
+
+
+def _establishes_numbered_rules(text: str, title: str) -> bool:
+    """识别本文件制定、决策或正文标题确认的多条执行规则。"""
+    # 保留引用依据的位置，去掉被引用的内容，避免把转述当成本文件的规则。
+    main_text = re.sub(r'《[^》]*》|〈[^〉]*〉', '《》', text)
+    main_text = re.sub(r'“[^”]*”|「[^」]*」|『[^』]*』|"[^"\n]*"', '', main_text)
+    main_text = re.split(
+        r'(?m)^[ \t]*(?:#{1,6}[ \t]+)?(?:附件|附表)[ \t]*'
+        r'[一二三四五六七八九十\d]*[ \t]*(?:[：:]|$)',
+        main_text,
+        maxsplit=1,
+    )[0]
+    opening, *sections = _POLICY_SECTION_RE.split(main_text)
+    has_own_adoption = (
+        _POLICY_ADOPTION_RE.search(opening) is not None
+        or _POLICY_NARRATIVE_ADOPTION_RE.search(opening) is not None
+    )
+    # 单次活动中的分类处理仍然只是临时安排，不作为一般管理规则的制定依据。
+    has_general_decision = (
+        _POLICY_DECISION_RE.search(opening) is not None
+        and re.search(_LIMITED_SCOPE, opening) is None
+    )
+    subject = policy_title_subject(title)
+    confirms_title = is_regulatory_title(title) and any(
+        policy_title_subject(line) == subject for line in opening.splitlines()[:12]
+    )
+    return (
+        (has_own_adoption or has_general_decision or confirms_title)
+        and not re.search(
+            rf'(?:本通知|本意见|{_POLICY_SELF_REFERENCE})\s*(?:仅|只)?适用于\s*{_LIMITED_SCOPE}',
+            main_text,
+        )
+        and sum(_POLICY_REQUIREMENT_RE.search(section) is not None for section in sections) >= 2
+    )
+
+
 def _detect_signals(text: str, filename: str, page_count: int, metadata: dict) -> List[Signal]:
     """统一检测所有信号（强信号 + 软信号）"""
     signals = []
@@ -163,16 +277,17 @@ def _detect_signals(text: str, filename: str, page_count: int, metadata: dict) -
                  r'(?:收稿日期|修回日期|录用日期).*?\d{4}', text, re.I):
         signals.append(Signal("academic_paper", 1.0, "检测到论文审稿或出版日期", True))
 
-    # 大量学术引用 [1]~[99]
-    citation_count = len(re.findall(r'\[\d{1,2}\]', text))
-    if citation_count >= 10:
-        signals.append(Signal("academic_paper", 1.0, f"检测到{citation_count}处学术引用", True))
-
     # 期刊卷期页格式
     if re.search(r'(?:Journal|Vol\.?|Volume)\s*\d+.*(?:No\.?|Issue)\s*\d+', text, re.I):
         signals.append(Signal("academic_paper", 1.0, "检测到期刊卷期格式", True))
 
     # --- 软信号 ---
+    # 行首编号也用于制度附录和参考文献列表；行内编号只作为辅助证据。
+    inline_citation_text = re.sub(r'(?m)^[^\S\n]*\[\d{1,2}\]', '', text)
+    citation_count = len(re.findall(r'\[\d{1,2}\]', inline_citation_text))
+    if citation_count >= 10:
+        signals.append(Signal("academic_paper", 2.0, f"检测到{citation_count}处行内方括号编号"))
+
     academic_keywords = [
         "abstract", "introduction", "keywords", "references",
         "materials and methods", "results", "discussion","conclusion","experiments",
@@ -203,39 +318,87 @@ def _detect_signals(text: str, filename: str, page_count: int, metadata: dict) -
 
     # ==================== 政策制度 ====================
     # --- 强信号 ---
-    # 红头文号（兼容 〔 ] [ 〕 等括号变体，年份限制1900-2099）
-    doc_number_pattern = r'[\u4e00-\u9fa5]{2,12}[〔\[［﹝【](?:19|20)\d{2}[〕\]］﹞】]\d+号'
-    if re.search(doc_number_pattern, text) or re.fullmatch(doc_number_pattern, metadata.get("source_doc_number", "")):
-        signals.append(Signal("policy_regulation", 1.0, "检测到公文发文字号", True))
+    # 结合正文标题、专题和排期识别学习计划，文件名只能作为佐证。
+    title = normalize_policy_title(filename)
+    if (
+        title.endswith("学习计划")
+        and normalize_policy_title(text.lstrip().partition("\n")[0]) == title
+        and re.search(r"(?m)^[ \t]*第[一二三四五六七八九十百\d]+专题\s*[：:]", text)
+        and re.search(r"(?m)^[ \t]*时间安排[ \t]*[：:][ \t]*\d{4}\s*年\s*\d{1,2}\s*月", text)
+    ):
+        signals.append(Signal("other", 1.0, "学习计划正文列有学习专题和月份安排", True))
 
     # 制度印发通知的文件名在扫描件中仍然可靠，应作为明确制度信号。
-    if re.search(
-        r'关于印发[《〈].{1,100}(?:办法|规定|条例|细则|制度|意见)[》〉]的通知',
-        filename,
-    ):
+    if is_policy_issuance_notice_title(title, regulatory_only=True):
         signals.append(Signal("policy_regulation", 1.0, "文件名为制度印发通知", True))
 
-    # 公文主送抄送格式
+    # 完整的直接制度标题也可独立分类；整串匹配避免把解读、研究或调查表当成制度。
+    if is_direct_policy_title(filename):
+        signals.append(Signal("policy_regulation", 1.0, "文件名为直接制度标题", True))
+
+    # 本地提取的标题还须与正文首行相符，不能只凭文件属性中的旧标题判定。
+    source_title = metadata.get("source_title", "")
+    opening_line = next((line for line in text.splitlines() if line.strip()), "")
+    if (is_direct_policy_title(source_title)
+            and normalize_policy_title(opening_line) == normalize_policy_title(source_title)):
+        signals.append(Signal("policy_regulation", 1.0, "来源标题与正文首行的直接制度标题一致", True))
+
+    # 通知、意见也可以载有反复执行的规则，核对其适用表述和正文要求。
+    applicable_scope = re.search(
+        rf'(?:本(?:通知|意见)|{_POLICY_SELF_REFERENCE})\s*(?:仅|只)?适用于\s*'
+        rf'(?!{_LIMITED_SCOPE})\S',
+        text,
+    )
+    if re.search(r'应当|不得|必须|须|严禁|方可', text):
+        if applicable_scope:
+            signals.append(Signal("policy_regulation", 1.0, "正文包含明确适用范围和约束性要求", True))
+        # 用条款自身的生效表述辅助识别，排除句中转述和引号内的引用。
+        elif re.search(
+            r'(?m)^[ \t]*(?:第[一二三四五六七八九十百\d]+条|[一二三四五六七八九十百\d]+[、.．])?[ \t]*'
+            r'本(?:制度|办法|规定|细则|条例|规则|章程)[^。；;“”「」]{0,100}'
+            r'自(?:颁布|公布|发布|印发)之日起(?:施行|实施|执行|生效)',
+            text,
+        ):
+            signals.append(Signal("policy_regulation", 1.0, "正文包含约束性要求和制度生效条款", True))
+
+    if _establishes_numbered_rules(text, title):
+        signals.append(Signal(
+            "policy_regulation", 1.0, "正文标题或制定、决策表述与多项条款中的执行要求相互印证", True,
+        ))
+
+    chapters, articles = _count_body_chapters_and_articles(text)
+    has_body_structure = (chapters >= 2 and articles >= 3) or articles >= 5
+    if has_body_structure:
+        # 章条结构本身可裁决，不再要求标题关键词、制定表述或特定义务用词。
+        signals.append(Signal(
+            "policy_regulation", 1.0, f"正文具有完整章条结构：{chapters}章、{articles}条", True,
+        ))
+
+    # 文号和其他公文格式保留在日志中，供审核溯源。
+    if (
+        re.search(_DOCUMENT_NUMBER_PATTERN, text)
+        or re.fullmatch(_DOCUMENT_NUMBER_PATTERN, metadata.get("source_doc_number", ""))
+    ):
+        signals.append(Signal("official_document", 0.0, "检测到公文发文字号"))
+
     if "主送：" in text and "抄送：" in text:
-        signals.append(Signal("policy_regulation", 1.0, "检测到公文主送抄送格式", True))
+        signals.append(Signal("official_document", 0.0, "检测到公文主送抄送格式"))
 
-    # 权威机关 + 印发
     if re.search(r'(?:国务院|中共中央|教育部|发改委|人民政府|办公厅).{0,15}印发', text):
-        signals.append(Signal("policy_regulation", 1.0, "检测到权威机关印发用语", True))
+        signals.append(Signal("official_document", 0.0, "检测到权威机关印发用语"))
 
-    # 公文特定套语
     if re.search(r'现印发给你们|请认真贯彻执行|请遵照执行|特此通知|此令', text):
-        signals.append(Signal("policy_regulation", 1.0, "检测到公文套语", True))
+        signals.append(Signal("official_document", 0.0, "检测到公文套语"))
 
     # --- 软信号 ---
     chapter_struct = len(re.findall(r'第[一二三四五六七八九十百\d]+[章条]', text))
-    if chapter_struct >= 3:
+    if chapter_struct >= 3 and not has_body_structure:
         signals.append(Signal("policy_regulation", 2.5, f"检测到{chapter_struct}处章节条款"))
 
     policy_types = ["通知", "规定", "办法", "条例", "细则", "意见", "决定", "公告", "批复", "令"]
     type_matches = sum(1 for t in policy_types if t in text)
     if type_matches >= 2:
-        signals.append(Signal("policy_regulation", 2.0, f"命中{type_matches}个公文类型词"))
+        signals.append(Signal("official_document", 0.0, f"命中{type_matches}个公文类型词"))
 
     if re.search(r'(?:自|于)\d{4}年\d{1,2}月\d{1,2}日(?:起?施行|实施|生效)', text):
         signals.append(Signal("policy_regulation", 1.5, "检测到施行日期"))
@@ -243,7 +406,7 @@ def _detect_signals(text: str, filename: str, page_count: int, metadata: dict) -
     if re.search(r'^\s*[\u4e00-\u9fa5]{2,12}(?:厅|局|委|办|部|署|会|院|校|政府)', text, re.M):
         signals.append(Signal("policy_regulation", 1.5, "检测到发文机关标志"))
 
-    if re.search(r'办法|规定|通知|意见|批复|条例|细则|制度', filename):
+    if re.search(r'办法|规定|条例|细则|制度', filename):
         signals.append(Signal("policy_regulation", 1.0, "文件名含制度关键词"))
 
     # ==================== 表单 ====================
@@ -317,7 +480,7 @@ def _calculate_soft_scores(signals: List[Signal]) -> Dict[str, float]:
     """按类别累计软信号权重"""
     scores = {"academic_paper": 0, "policy_regulation": 0, "admin_form": 0, "contract": 0}
     for s in signals:
-        if not s.is_strong:
+        if not s.is_strong and s.category in scores:
             scores[s.category] += s.weight
     return scores
 
@@ -358,7 +521,13 @@ def _rule_based_classify(text, filename, page_count, metadata):
 
     # 4. 阈值判定（必须满足：绝对分够高 + 与第二名拉开差距）
     if top_score < 3.5 or (top_score - second_score) < 2.0:
-        return None, 0.0, "信号不足或类别差距过小", signals
+        if not signals:
+            return None, 0.0, "未触发任何有效分类信号", signals
+        reason = (
+            f"信号不足或类别差距过小：最高得分{top_score:.1f}（要求≥3.5），"
+            f"领先第二名{top_score - second_score:.1f}分（要求≥2.0）"
+        )
+        return None, 0.0, reason, signals
 
     confidence = _normalize_confidence(top_score, second_score)
 

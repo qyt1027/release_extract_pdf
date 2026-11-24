@@ -1,4 +1,17 @@
 const form = document.getElementById('qa-form');
+    function applicableUnitLabel(policy) {
+      const paths = policy?.applicable_unit_paths;
+      if (paths?.length) {
+        return `适用：${paths.map(path => Array.isArray(path) ? path.join('-') : path).join('、')}`;
+      }
+      const units = policy?.applicable_unit;
+      return units?.length ? `适用：${Array.isArray(units) ? units.join('、') : units}` : '';
+    }
+    function policyIssueLabel(policy) {
+      if (policy.issue_date) return `发布于 ${policy.issue_date}`;
+      const month = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(policy.issue_month || '');
+      return month ? `发布于 ${month[1]}年${Number(month[2])}月` : '';
+    }
     function policyValidityLabel(policy) {
       const now=new Date();
       const today=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
@@ -105,7 +118,7 @@ const form = document.getElementById('qa-form');
       const meta=document.createElement('p');meta.className='citation-meta';
       const page=item.page_start?(item.page_end&&item.page_end!==item.page_start?`第 ${item.page_start}–${item.page_end} 页`:`第 ${item.page_start} 页`):'页码未知';
       const temporal={applicable:'适用',expired:'已失效',future:'尚未生效',unknown:'效力待核实',unfiltered:'未按日期筛选'};
-      meta.textContent=[...(item.chapter_path||[]),item.clause_no||'条款编号未识别',page,temporal[item.temporal_status]||'效力待核实'].join(' · ');
+      meta.textContent=[...(item.chapter_path||[]),item.clause_no||'条款编号未识别',page,applicableUnitLabel(item),temporal[item.temporal_status]||'效力待核实'].filter(Boolean).join(' · ');
       const quote=document.createElement('blockquote');quote.textContent=item.raw_text||'';
       host.append(title,meta,quote);
       if(item.policy_id){const open=document.createElement('button');open.type='button';open.className='secondary';open.textContent='查看完整制度';open.addEventListener('click',()=>openPolicy(item.policy_id,item.clause_id));host.appendChild(open);}
@@ -195,7 +208,7 @@ const form = document.getElementById('qa-form');
         (data.results||[]).forEach(item=>{
           const row=document.createElement('article');row.className='search-result';
           const title=document.createElement('h3');title.textContent=item.policy?.title||'未命名制度';
-          const meta=document.createElement('small');meta.textContent=[...(item.clause?.chapter_path||[]),item.clause?.clause_no||'条款编号未识别',item.clause?.page_start?`第 ${item.clause.page_start} 页`:''].filter(Boolean).join(' · ');
+          const meta=document.createElement('small');meta.textContent=[...(item.clause?.chapter_path||[]),item.clause?.clause_no||'条款编号未识别',item.clause?.page_start?`第 ${item.clause.page_start} 页`:'',applicableUnitLabel(item.policy)].filter(Boolean).join(' · ');
           const raw=document.createElement('p');raw.textContent=item.clause?.raw_text||'';
           row.append(title,meta,raw);
           if(item.policy?.policy_id){const open=document.createElement('button');open.type='button';open.className='secondary';open.textContent='查看完整制度';open.addEventListener('click',()=>openPolicy(item.policy.policy_id,item.clause?.clause_id));row.appendChild(open);}
@@ -208,7 +221,7 @@ const form = document.getElementById('qa-form');
       const params=new URLSearchParams({q:document.getElementById('library-query').value.trim(),status:document.getElementById('library-status').value,limit:'30',offset:String(libraryOffset)});
       state.textContent='正在加载制度…';host.replaceChildren();document.getElementById('policy-detail').hidden=true;
       try {const data=await api('/api/policies?'+params);libraryTotal=data.total;state.textContent=`共 ${data.total} 份制度`;
-        (data.items||[]).forEach(item=>{const row=document.createElement('button');row.type='button';row.className='policy-row';const name=document.createElement('span');name.textContent=item.title||'未命名制度';const meta=document.createElement('small');meta.textContent=[item.issuing_department,policyValidityLabel(item)].filter(Boolean).join(' · ');row.append(name,meta);row.addEventListener('click',()=>openPolicy(item.policy_id));host.appendChild(row);});
+        (data.items||[]).forEach(item=>{const row=document.createElement('button');row.type='button';row.className='policy-row';const name=document.createElement('span');name.textContent=item.title||'未命名制度';const meta=document.createElement('small');meta.textContent=[item.issuing_department,applicableUnitLabel(item),policyIssueLabel(item),policyValidityLabel(item)].filter(Boolean).join(' · ');row.append(name,meta);row.addEventListener('click',()=>openPolicy(item.policy_id));host.appendChild(row);});
         document.getElementById('library-prev').disabled=libraryOffset===0;document.getElementById('library-next').disabled=libraryOffset+30>=libraryTotal;
       }catch(error){state.textContent=error.message;}
     }
@@ -220,7 +233,7 @@ const form = document.getElementById('qa-form');
       host.replaceChildren();host.hidden=false;state.textContent='正在加载制度原文…';
       try {const data=await api('/api/policies/'+encodeURIComponent(policyId));state.textContent='';
         const title=document.createElement('h2');title.textContent=data.policy.title||'未命名制度';host.appendChild(title);
-        const meta=document.createElement('p');meta.className='citation-meta';meta.textContent=[data.policy.doc_number,data.policy.issuing_department,data.policy.issue_date?`发布于 ${data.policy.issue_date}`:'',data.policy.effective_date?`生效于 ${data.policy.effective_date}`:'',policyValidityLabel(data.policy)].filter(Boolean).join(' · ');host.appendChild(meta);
+        const meta=document.createElement('p');meta.className='citation-meta';meta.textContent=[data.policy.doc_number,data.policy.issuing_department,applicableUnitLabel(data.policy),policyIssueLabel(data.policy),data.policy.effective_date?`生效于 ${data.policy.effective_date}`:'',policyValidityLabel(data.policy)].filter(Boolean).join(' · ');host.appendChild(meta);
         const toc=document.createElement('nav');toc.className='policy-toc';toc.setAttribute('aria-label','制度章节目录');const chapters=new Set();
         (data.clauses||[]).forEach(item=>{const chapter=item.chapter_path?.[0];if(!chapter||chapters.has(chapter))return;chapters.add(chapter);const button=document.createElement('button');button.type='button';button.textContent=chapter;button.addEventListener('click',()=>document.getElementById('clause-'+item.clause_id)?.scrollIntoView({behavior:'smooth',block:'start'}));toc.appendChild(button);});
         if(toc.childElementCount)host.appendChild(toc);

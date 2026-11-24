@@ -8,6 +8,33 @@ from policy.storage import find_policy_documents_by_doc_number, upsert_policy_do
 
 
 class DocumentNumberTests(unittest.TestCase):
+    def test_parenthesized_number_is_split_from_title_in_classification_and_metadata(self):
+        from classification.document import classify_document
+
+        cases = (
+            ("关于申请学位论文要求的规定", "（理科研字 [2015]1号）", "理科研字〔2015〕1号"),
+            ("计算机学院设备管理办法（试行）", "(计院字（2023）0041号)", "计院字〔2023〕41号"),
+        )
+        for title, suffix, number in cases:
+            with self.subTest(suffix=suffix):
+                heading = title + suffix
+                text = heading + "\n一、申请人须按要求提交材料。"
+                filename = heading + ".docx"
+                result = classify_document(filename, filename, parsed_text=text)
+                self.assertEqual(result["doc_type"], "policy_regulation")
+                blocks = [ContentBlock(type=BlockType.TEXT, content=line) for line in text.splitlines()]
+                meta = extract_policy_metadata(blocks, filename)
+                self.assertEqual(meta["title"], title)
+                self.assertEqual(meta["doc_number"], number)
+
+    def test_title_notes_without_complete_document_number_are_preserved(self):
+        from core.policy_titles import split_policy_title_and_number
+
+        title = "关于申请学位论文要求的规定"
+        for suffix in ("（2015年修订）", "（理科研字[2015]1号", "（详见理科研字[2015]1号）"):
+            with self.subTest(suffix=suffix):
+                self.assertEqual(split_policy_title_and_number(title + suffix), (title + suffix, ""))
+
     def test_abolition_recovers_number_without_changing_evidence(self):
         raw = '原《武汉大学本科专业设置与管理规定（2013 年修订）》（武大教字〔201314 号）同时废止。'
         candidates = extract_abolition_candidates({'raw_text': raw})

@@ -5,6 +5,7 @@
 """
 import hashlib
 import re
+from pathlib import Path
 from datetime import datetime
 from typing import Any, Optional
 
@@ -26,9 +27,9 @@ def _is_low_confidence_source_name(source_name: str) -> bool:
         return True
     normalized = source_name.casefold()
     return bool(
-        re.fullmatch(r"tmp[a-z0-9_-]{6,}\.pdf", normalized)
-        or re.fullmatch(r"(?:[0-9a-f]{16,}|pdf_[0-9a-f]{16,})\.pdf", normalized)
-        or re.fullmatch(r"(?:download|document|untitled|file|unknown)(?:[ _-]?\d+|\s*\(\d+\))?\.pdf", normalized)
+        re.fullmatch(r"tmp[a-z0-9_-]{6,}\.(?:pdf|docx?)", normalized)
+        or re.fullmatch(r"(?:[0-9a-f]{16,}|pdf_[0-9a-f]{16,})\.(?:pdf|docx?)", normalized)
+        or re.fullmatch(r"(?:download|document|untitled|file|unknown)(?:[ _-]?\d+|\s*\(\d+\))?\.(?:pdf|docx?)", normalized)
     )
 
 
@@ -42,7 +43,12 @@ def choose_display_file_name(source_name: str, pdf_title: str = "") -> str:
     cleaned_title = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", title).strip(". ")
     if not 3 <= len(cleaned_title) <= 180:
         return source
-    return cleaned_title if cleaned_title.lower().endswith(".pdf") else f"{cleaned_title}.pdf"
+    # 标题恢复只改变展示名称，Word 来源不能因此被登记成 PDF。
+    suffix = Path(source).suffix.lower()
+    if suffix not in {'.pdf', '.doc', '.docx'}:
+        suffix = '.pdf'
+    cleaned_title = re.sub(r'\.(?:pdf|docx?)$', '', cleaned_title, flags=re.I)
+    return f"{cleaned_title}{suffix}"
 
 
 def _ensure_meta_tables() -> None:
@@ -298,6 +304,13 @@ def record_file_done(file_id: str) -> None:
 def record_file_failed(file_id: str, error: str) -> None:
     """标记文件处理失败。"""
     _update_file_status(file_id, ProcessingStatus.FAILED, error)
+
+
+def record_file_duplicate_status(file_id: str, status: ProcessingStatus, message: str) -> None:
+    """保存重复文件的明确跳过或待确认结果，避免当作成功或自动重试。"""
+    if status not in {ProcessingStatus.SKIPPED, ProcessingStatus.PENDING_CONFIRMATION}:
+        raise ValueError("重复文件状态必须为跳过或待确认")
+    _update_file_status(file_id, status, message)
 
 
 def _update_file_status(

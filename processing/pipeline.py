@@ -18,10 +18,10 @@ from parsers import PDFParser
 from storage.adapters import storage
 from storage.file_records import (
     choose_display_file_name,
+    ensure_file_record,
     record_block_storage,
     record_file_done,
     record_file_failed,
-    record_file_start,
     update_file_name,
 )
 from .images import process_image_blocks
@@ -236,28 +236,55 @@ def process_pdf(
     source_file_name: str | None = None,
     abolition_confirmation: Callable[[Any], str] | None = None,
     abolition_approval_confirmation: Callable[[dict[str, Any]], str] | None = None,
+    duplicate_confirmation: Callable[[dict[str, Any]], str] | None = None,
+    folder_unit_confirmation: Callable[[str, str, str], bool] | None = None,
+    file_overwrite_confirmation: Callable[[dict[str, Any]], bool | None] | None = None,
 ) -> ProcessingResult:
     t_start = time.time()
     errors: list[str] = []
     file_id = ""
     has_critical_error = False
     final_status = ProcessingStatus.DONE
+    duplicates: list[dict[str, Any]] = []
+    skipped_titles: list[str] = []
     abolition_summary = {"candidates": 0, "inserted": 0, "skipped": 0}
     abolition_reconciliation = {"matched": 0, "approved": 0, "skipped": 0}
 
 
     try:
-        # ---- Step 1: 读取文件，上传到 MinIO ----
-        print(f"{datetime.datetime.now()} 开始读取文件上传至MinIO")
-        print(f"file_id: {file_id}")
+        # ---- Step 1: 读取文件，检查相同内容是否已成功导入 ----
+        print(f"{datetime.datetime.now()} 开始读取文件并检查导入状态")
         print(f"file_path: {file_path}")
 
         with open(file_path, "rb") as f:
             file_data = f.read()
         file_name = source_file_name or file_path.replace("\\", "/").split("/")[-1]
 
-        # ---- Step 2: 记录文件开始处理 ----
-        file_id = record_file_start(file_name, file_data, page_count)
+        # ---- Step 2: 复用文件记录，已完成文件须明确确认后才能覆盖 ----
+        record = ensure_file_record(file_name, file_data, page_count)
+        file_id = record["file_id"]
+        print(f"file_id: {file_id}")
+        if record.get("status") in {"done", "succeeded"}:
+            overwrite = None
+            if file_overwrite_confirmation is not None:
+                try:
+                    overwrite = file_overwrite_confirmation({**record, "source_file_name": file_name})
+                except Exception:
+                    print("覆盖确认未能完成，已有数据保持不变。")
+            if overwrite is not True:
+                # 未确认时只返回本次结果，不能修改已有成功记录的状态。
+                status = ProcessingStatus.SKIPPED if overwrite is False else ProcessingStatus.PENDING_CONFIRMATION
+                message = (
+                    "已选择跳过，本次不重新处理"
+                    if overwrite is False else "文件已成功导入，等待用户确认是否覆盖，已有数据保持不变"
+                )
+                message += f"（已有文件：{record.get('file_name') or file_name}）"
+                print(message)
+                return ProcessingResult(
+                    file_id=file_id, status=status, message=message,
+                    duration_seconds=round(time.time() - t_start, 2),
+                )
+            print(f"已确认覆盖，将重新解析并更新原文件记录：{file_id}")
 
         # 上传原始 PDF 到 MinIO；抽取验证阶段可以通过环境变量暂时关闭。
         if app_config.minio.enabled:
@@ -327,10 +354,17 @@ def process_pdf(
         # ... 在 process_pdf 中 ...
         metadata = {}
         try:
-            metadata = extract_document_metadata(blocks, doc_type)
+            metadata = extract_document_metadata(blocks, doc_type, file_name, source_path=file_path)
             print(f"{datetime.datetime.now()}  提取metadata为{metadata}")
         except Exception as e:
-            errors.append(f"matedata获取失败: {traceback.format_exc()}")
+            message = f"元数据提取失败：{type(e).__name__}: {e}"
+            print(f"{datetime.datetime.now()} {message}")
+            errors.append(message)
+            record_file_failed(file_id, message)
+            return ProcessingResult(
+                file_id=file_id, status=ProcessingStatus.FAILED, total_blocks=total_blocks,
+                errors=errors, duration_seconds=round(time.time() - t_start, 2),
+            )
 
         resolved_file_name = choose_display_file_name(
             file_name,
@@ -343,22 +377,60 @@ def process_pdf(
         # 规章制度单独保存文档和条款结构。此阶段只使用解析块和确定性规则，
         # 实体、关系抽取由独立命令执行，避免大模型失败影响 PDF 基础处理。
         if doc_type == "policy_regulation":
+            # 沿用完整文件的拆分边界和制度键，逐项确认后再写业务产物。
+            from policy.document_parts import confirm_folder_applicable_units, split_policy_document
+            from policy.duplicates import confirm_policy_import
+            from storage.file_records import record_file_duplicate_status
+
+            parts = split_policy_document(blocks, metadata, file_name, source_path=file_path)
+            accepted_parts = []
+            for part in parts:
+                part_metadata = part["metadata"]
+                action, candidates = confirm_policy_import(
+                    file_id, file_name, part_metadata, duplicate_confirmation,
+                )
+                duplicates.extend(candidates)
+                if action == "pending":
+                    break
+                if action == "skip":
+                    skipped_titles.append(part_metadata["title"])
+                else:
+                    accepted_parts.append(part)
+
+            if action == "pending" or not accepted_parts:
+                status = (ProcessingStatus.PENDING_CONFIRMATION if action == "pending"
+                          else ProcessingStatus.SKIPPED)
+                message = ("此文件有重复制度待确认，请在终端重新处理原文件或恢复批次"
+                           if action == "pending" else "已跳过文件中的全部制度")
+                record_file_duplicate_status(file_id, status, message)
+                print(message)
+                return ProcessingResult(
+                    file_id=file_id, status=status, total_blocks=total_blocks,
+                    duplicate_candidates=duplicates, message=message,
+                    duration_seconds=round(time.time() - t_start, 2),
+                )
             try:
                 from policy.pipeline import structure_policy_file
 
+                if folder_unit_confirmation is not None:
+                    confirm_folder_applicable_units(accepted_parts, file_path, folder_unit_confirmation)
+                if skipped_titles:
+                    print(f"已跳过重复制度：{'、'.join(skipped_titles)}")
+                    blocks = [block for part in accepted_parts for block in part["blocks"]]
                 structure_result = structure_policy_file(
                     file_id=file_id,
                     file_name=file_name,
                     blocks=blocks,
                     metadata=metadata,
+                    parts=accepted_parts,
                 )
                 print(
                     f"{datetime.datetime.now()} 制度结构化完成："
                     f"{structure_result['clause_count']} 条，"
                     f"质量 {structure_result['parse_quality']:.3f}"
                 )
-                if len(structure_result['documents']) > 1:
-                    print(f"已从原文件拆分 {len(structure_result['documents'])} 项独立制度")
+                if len(parts) > 1:
+                    print(f"已从原文件拆分 {len(parts)} 项独立制度，已结构化 {len(accepted_parts)} 项")
                 if abolition_confirmation is not None or abolition_approval_confirmation is not None:
                     from policy.abolition import (
                         reconcile_unresolved_abolition_relations,
@@ -382,7 +454,14 @@ def process_pdf(
                         except Exception:
                             errors.append(f"废止关系识别或确认失败: {traceback.format_exc()}")
             except Exception as e:
-                errors.append(f"制度条款结构化失败: {traceback.format_exc()}")
+                message = f"制度条款结构化失败：{type(e).__name__}: {e}"
+                print(f"{datetime.datetime.now()} {message}")
+                errors.append(message)
+                record_file_failed(file_id, message)
+                return ProcessingResult(
+                    file_id=file_id, status=ProcessingStatus.FAILED, total_blocks=total_blocks,
+                    errors=errors, duration_seconds=round(time.time() - t_start, 2),
+                )
 
 
         # ---- Step 4: 分类所有表格块 ----
@@ -430,7 +509,7 @@ def process_pdf(
                 if b.type == BlockType.TEXT and b.content.strip():
                     record_block_storage(
                         file_id, b, "pg_vector",
-                        f"pdf_{file_id}_text"
+                        "pdf_text_chunks"
                     )
                 elif b.type == BlockType.IMAGE and b.image_url:
                     record_block_storage(
@@ -470,6 +549,8 @@ def process_pdf(
             abolition_relations_inserted=abolition_summary["inserted"],
             abolition_relations_skipped=abolition_summary["skipped"],
             abolition_relations_approved=abolition_reconciliation["approved"],
+            duplicate_candidates=duplicates,
+            message=f"已跳过重复制度：{'、'.join(skipped_titles)}" if skipped_titles else "",
             errors=errors,
             duration_seconds=round(time.time() - t_start, 2),
         )

@@ -1,5 +1,6 @@
 """通过真实 SQL 验证重置时的跨制度一致性及事务回滚。"""
 import hashlib
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -47,9 +48,14 @@ class SqlStorage:
         ''')
 
     def execute(self, sql, params=()):
+        # SQLite 替身不实现 PostgreSQL 事务咨询锁。
+        if sql.startswith("SELECT pg_advisory_xact_lock"):
+            return None
         try:
             return self.conn.execute(sql.replace("%s", "?"),
-                                     tuple(value.isoformat() if isinstance(value, datetime) else value for value in params))
+                                     tuple(value.isoformat() if isinstance(value, datetime)
+                                           else json.dumps(value) if isinstance(value, list) else value
+                                           for value in params))
         except sqlite3.OperationalError as error:
             if "no such table" in str(error):
                 raise MissingTable(str(error)) from error
@@ -172,15 +178,17 @@ class ResetConsistencyTests(unittest.TestCase):
 
     def test_purge_removes_old_metadata_incoming_relations_and_empty_runs(self):
         self.add_knowledge_task()
-        for field in ('title TEXT', 'doc_number TEXT', 'effective_date TEXT', 'family_id TEXT', 'current_extraction_run_id TEXT'):
+        for field in ('title TEXT', 'doc_number TEXT', 'effective_date TEXT', 'family_id TEXT', 'current_extraction_run_id TEXT', 'applicable_unit TEXT'):
             self.db.execute('ALTER TABLE policy_documents ADD COLUMN ' + field)
         self.db.execute("UPDATE policy_documents SET title='旧标题',doc_number='旧文号',effective_date='2024-01-01',family_id='old',current_extraction_run_id='old_run' WHERE policy_id='a'")
+        self.db.execute("UPDATE policy_documents SET applicable_unit='计算机学院' WHERE policy_id='a'")
         self.db.execute("INSERT INTO policy_document_relations VALUES ('ca','c','a','c1','approved','2025-01-01')")
         self.db.execute("INSERT INTO policy_family_candidates (candidate_id,source_policy_id,target_policy_id) VALUES ('ca_title','c','a')")
         with patch('processing.reset.load_folder_reset_plan', return_value=self.folder_plan()):
             reset_folder_database_artifacts("folder", confirm=True, release_stale=True, purge=True)
         doc = self.db.query("policy_documents", "policy_id='a'")[0]
         self.assertEqual((doc['title'],doc['doc_number'],doc['effective_date'],doc['family_id'],doc['current_extraction_run_id']), ('','',None,None,None))
+        self.assertEqual(json.loads(doc['applicable_unit']), [])
         self.assertEqual(self.db.query("policy_document_relations"), [])
         self.assertEqual(self.db.query("policy_knowledge_runs_v2"), [])
         self.assertEqual(self.db.query("policy_family_candidates"), [])

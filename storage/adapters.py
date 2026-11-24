@@ -360,9 +360,16 @@ class PgStorageAdapter(RelationalStorage, VectorStorage, DocumentStorage):
         index_name = self._validate_vector_index_name(index_name)
         if not metadata_key:
             raise ValueError("metadata 字段名不能为空")
-        sql = f'DELETE FROM "{index_name}" WHERE metadata ->> %s = %s'
+        if index_name == "pdf_text_chunks" and metadata_key == "file_id":
+            sql = f'DELETE FROM "{index_name}" WHERE file_id = %s'
+            params = (metadata_value,)
+        else:
+            sql = f'DELETE FROM "{index_name}" WHERE metadata ->> %s = %s'
+            params = (metadata_key, metadata_value)
         with self.conn.cursor() as cur:
-            cur.execute(sql, (metadata_key, metadata_value))
+            if index_name == "pdf_text_chunks":
+                cur.execute("SELECT pg_advisory_xact_lock(hashtext('pdf_text_file'), hashtext(%s))", (metadata_value,))
+            cur.execute(sql, params)
             return cur.rowcount
 
     def count_vectors(self, index_name: str) -> int:

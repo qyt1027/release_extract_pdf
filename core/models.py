@@ -44,6 +44,8 @@ class ProcessingStatus(str, Enum):
     PROCESSING = "processing"
     DONE = "done"
     FAILED = "failed"
+    SKIPPED = "skipped"
+    PENDING_CONFIRMATION = "pending_confirmation"
 
 
 class BatchStatus(str, Enum):
@@ -54,6 +56,7 @@ class BatchStatus(str, Enum):
     SUCCEEDED = "succeeded"
     PARTIAL_FAILED = "partial_failed"
     FAILED = "failed"
+    PENDING_CONFIRMATION = "pending_confirmation"
 
 
 class BatchItemStatus(str, Enum):
@@ -64,6 +67,7 @@ class BatchItemStatus(str, Enum):
     SKIPPED = "skipped"
     RETRY_WAIT = "retry_wait"
     FAILED = "failed"
+    PENDING_CONFIRMATION = "pending_confirmation"
 
 
 class ErrorKind(str, Enum):
@@ -237,6 +241,8 @@ class ProcessingResult(BaseModel):
     errors: list[str] = Field(default_factory=list)
     duration_seconds: float = 0.0
     error_kind: Optional[ErrorKind] = None
+    duplicate_candidates: list[dict[str, Any]] = Field(default_factory=list)
+    message: str = ""
 
 
 class ProcessingVersion(BaseModel):
@@ -368,7 +374,9 @@ class PolicyDocument(BaseModel):
     title: str = ""
     doc_number: str = ""
     issuing_department: str = ""
+    applicable_unit: list[str] = Field(default_factory=list)
     issue_date: Optional[str] = None
+    issue_month: Optional[str] = None
     effective_date: Optional[str] = None
     expiry_date: Optional[str] = None
     validity_status: PolicyValidityStatus = PolicyValidityStatus.CURRENT
@@ -413,6 +421,7 @@ class PolicyClause(BaseModel):
     page_start: int = 0
     page_end: int = 0
     bboxes: list[list[float]] = Field(default_factory=list)
+    tables: list[dict] = Field(default_factory=list)
     confidence: float = 0.0
     content_hash: str = ""
     sequence_no: int = 0

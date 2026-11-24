@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import json
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Callable
+from core.unit_aliases import applicable_unit_paths, normalize_applicable_units
 
 
 def build_batch_clause_structure(
@@ -25,6 +27,7 @@ def build_batch_clause_structure(
         "page_start",
         "page_end",
         "sequence_no",
+        "tables",
     )
     document_fields = (
         "policy_id",
@@ -37,6 +40,8 @@ def build_batch_clause_structure(
         "source_page_start",
         "source_page_end",
         "structure_version",
+        "applicable_unit", "issuing_department", "doc_number_raw", "issue_date", "issue_month",
+        "effective_date", "expiry_date", "validity_status", "version", "parse_quality", "structure_status",
     )
     for document in sorted(
         documents,
@@ -48,13 +53,20 @@ def build_batch_clause_structure(
             key=lambda item: (int(item.get("sequence_no") or 0), str(item.get("clause_id") or "")),
         )
         exported_document = {
-            field: document.get(field) if document.get(field) is not None else ""
+            field: (document[field].isoformat() if isinstance(document.get(field), (date, datetime))
+                    else document.get(field) if document.get(field) is not None else "")
             for field in document_fields
         }
+        # 兼容旧字段名称，避免文号已保存却在导出别名中显示为空。
+        exported_document["document_no"] = document.get("document_no") or document.get("doc_number") or ""
+        exported_document["doc_number"] = document.get("doc_number") or document.get("document_no") or ""
+        exported_document["applicable_unit"] = normalize_applicable_units(document.get("applicable_unit"))
+        exported_document["applicable_unit_paths"] = applicable_unit_paths(exported_document["applicable_unit"])
         exported_document["clauses"] = [
             {
-                field: list(clause.get(field) or []) if field == "chapter_path" else clause.get(field) or ""
-                for field in clause_fields
+                field: list(clause.get(field) or []) if field in {"chapter_path", "tables"}
+                else clause.get(field) if clause.get(field) is not None else ""
+                for field in clause_fields if field != "tables" or clause.get("tables")
             }
             for clause in clauses
         ]

@@ -4,6 +4,9 @@ import argparse
 
 
 _COMMAND_ARGUMENTS = (
+    "rebuild_file_text",
+    "normalize_applicable_units",
+    "migrate_text_chunks",
     "sample_policy_knowledge_v2",
     "process",
     "process_dir",
@@ -102,6 +105,14 @@ def build_parser() -> argparse.ArgumentParser:
     classification_group = parser.add_argument_group("条款义务、许可、禁止分类（研究）")
     knowledge_v2_group = parser.add_argument_group("制度知识抽取 V2（研究）")
 
+    recovery_group.add_argument("--migrate-text-chunks", action="store_true", help="将旧文本向量迁移到共享表，保留源表")
+    recovery_group.add_argument("--rebuild-file-text", help="仅重建指定文件的共享文本向量，保留旧表及制度审核数据")
+    recovery_group.add_argument("--text-source", help="文本重建使用的原文件路径，须与原记录SHA256一致")
+    recovery_group.add_argument("--normalize-applicable-units", action="store_true", help="按学院别名表统一历史制度适用单位")
+    recovery_group.add_argument("--unit-normalization-dry-run", action="store_true", help="仅预览适用单位统一结果，不修改数据")
+    recovery_group.add_argument("--text-migration-dry-run", action="store_true", help="仅预检查文本迁移，不写入数据")
+    recovery_group.add_argument("--legacy-embedding-model", help="为缺少模型记录的旧文件明确声明原嵌入模型")
+
     pdf_group.add_argument(
         "--process",
         type=str,
@@ -110,9 +121,9 @@ def build_parser() -> argparse.ArgumentParser:
     pdf_group.add_argument(
         "--backend",
         type=str,
-        choices=["cloudmineru", "pymupdf"],
+        choices=["cloudmineru", "mineru", "pymupdf"],
         default=None,
-        help="指定解析后端：cloudmineru或pymupdf，默认从 config 读取"
+        help="指定解析后端：cloudmineru、mineru（本地 MinerU）或 pymupdf，默认从 config 读取"
     )
     pdf_group.add_argument(
         "--process-dir",
@@ -375,6 +386,12 @@ def validate_args(
     args: argparse.Namespace,
 ) -> list[str] | None:
     """校验命令组合，返回流程分流所选的事项域。"""
+    if (args.text_migration_dry_run or args.legacy_embedding_model) and not args.migrate_text_chunks:
+        parser.error("文本迁移选项只能与 --migrate-text-chunks 一起使用")
+    if args.unit_normalization_dry_run and not args.normalize_applicable_units:
+        parser.error("--unit-normalization-dry-run 只能与 --normalize-applicable-units 一起使用")
+    if args.text_source and not args.rebuild_file_text:
+        parser.error("--text-source 只能与 --rebuild-file-text 一起使用")
     if sum(bool(getattr(args, name)) for name in _COMMAND_ARGUMENTS) > 1:
         parser.error("处理、批次和制度抽取参数只能选择一个")
     if args.reset_file:

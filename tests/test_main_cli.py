@@ -27,6 +27,10 @@ class MainCliTests(unittest.TestCase):
         cases = [
             (["--process", "sample.pdf", "--backend", "pymupdf"],
              "run_process", ("sample.pdf",), {"backend": "pymupdf"}),
+            (["--process", "sample.pdf", "--backend", "mineru"],
+             "run_process", ("sample.pdf",), {"backend": "mineru"}),
+            (["--process-dir", "samples", "--backend", "mineru"],
+             "run_process_dir", ("samples",), {"backend": "mineru"}),
             (["--process-dir", "samples"],
              "run_process_dir", ("samples",), {"backend": None}),
             (["--reset-folder", "samples", "--confirm-reset-folder", "--allow-shared-reset",
@@ -90,6 +94,11 @@ class MainCliTests(unittest.TestCase):
     def test_invalid_command_combinations_do_not_execute(self) -> None:
         cases = [
             (["--process", "sample.pdf", "--reset-folder", "samples"], "只能选择一个"),
+            (["--text-source", "source.docx"], "只能与 --rebuild-file-text"),
+            (["--unit-normalization-dry-run"], "只能与 --normalize-applicable-units"),
+            (["--migrate-text-chunks", "--process", "sample.pdf"], "只能选择一个"),
+            (["--text-migration-dry-run"], "只能与 --migrate-text-chunks"),
+            (["--legacy-embedding-model", "old-model"], "只能与 --migrate-text-chunks"),
             (["--confirm-reset-folder"], "只能与 --reset-folder"),
             (["--allow-shared-reset"], "只能与 --reset-folder"),
             (["--release-stale-reset"], "只能与 --reset-folder"),

@@ -1,11 +1,18 @@
 """验证同名制度版本匹配不能造成新制度自我废止。"""
 import unittest
 from contextlib import nullcontext
+from io import StringIO
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from policy import storage
-from policy.abolition import build_abolition_relations, resolve_abolition_target
+from policy.abolition import (
+    build_abolition_relations,
+    extract_abolition_candidates,
+    prompt_abolition_relation_insertion,
+    reconcile_unresolved_abolition_relations,
+    resolve_abolition_target,
+)
 
 
 class AbolitionVersionTests(unittest.TestCase):
@@ -24,6 +31,66 @@ class AbolitionVersionTests(unittest.TestCase):
                 "raw_text":"2017年印发的《细则》废止。"})[0]
         self.assertEqual(relation.target_policy_id,"old")
         self.assertIsNone(relation.effective_date)
+
+    def test_parenthetical_edition_year_selects_old_version_without_document_number(self):
+        documents = [
+            {"policy_id": "newer", "doc_number": "校发〔2022〕10号"},
+            {"policy_id": "old", "issue_date": "2014-03-14"},
+        ]
+        for annotation in ("（2014年制定）", "(2014 年 3 月发布)", "（2014年修订）"):
+            with (
+                self.subTest(annotation=annotation),
+                patch("policy.abolition.find_policy_documents_by_normalized_title", return_value=documents),
+                patch("policy.abolition.find_policy_documents_by_doc_number", return_value=[]) as by_number,
+            ):
+                text = f"原《设备管理细则》{annotation}同时废止。"
+                relation = build_abolition_relations({"policy_id": "source", "raw_text": text})[0]
+                self.assertEqual(relation.target_doc_number, "")
+                self.assertEqual(relation.target_policy_id, "old")
+                self.assertIsNone(relation.effective_date)
+                self.assertEqual(relation.evidence_text, text)
+                by_number.assert_not_called()
+
+    def test_parenthetical_comments_and_document_numbers_are_distinguished(self):
+        text = ("原《甲办法》（内部印发），《依据办法》仍有效。"
+                "《甲办法》（2014年实施）和《乙办法》（教育部令第41号）同时废止。")
+        candidates = extract_abolition_candidates({"raw_text": text})
+        self.assertEqual(
+            [(candidate["target_title"], candidate["target_doc_number"]) for candidate in candidates],
+            [("甲办法", ""), ("乙办法", "教育部令第41号")],
+        )
+
+    def test_historical_year_in_number_column_can_match_a_later_import_by_year(self):
+        stored = {
+            "relation_id": "relation_a", "source_policy_id": "new", "review_status": "pending",
+            "target_title": "设备管理细则", "target_doc_number": "2014年制定",
+            "evidence_text": "《设备管理细则》（2014年制定）同时废止。",
+        }
+        with (
+            patch("policy.abolition.list_policy_document_relations", return_value=[stored]),
+            patch("policy.abolition.find_policy_documents_by_normalized_title", return_value=[
+                {"policy_id": "old", "doc_number": "校发〔2014〕1号"},
+                {"policy_id": "middle", "doc_number": "校发〔2018〕1号"},
+            ]),
+            patch("policy.abolition.find_policy_documents_by_doc_number", return_value=[]) as by_number,
+        ):
+            result = reconcile_unresolved_abolition_relations("old", lambda _: "skip")
+        self.assertEqual(result, {"matched": 1, "approved": 0, "skipped": 1})
+        by_number.assert_not_called()
+
+    def test_terminal_displays_edition_year_in_its_own_field(self):
+        relation = {
+            "target_title": "设备管理细则", "target_doc_number": "2014年制定",
+            "evidence_text": "《设备管理细则》（2014年制定）同时废止。",
+        }
+        with (
+            patch("policy.abolition.get_policy_document", return_value={}),
+            patch("builtins.input", return_value="n"),
+            patch("sys.stdout", new_callable=StringIO) as output,
+        ):
+            prompt_abolition_relation_insertion()(relation)
+        self.assertIn("目标文号: 未识别", output.getvalue())
+        self.assertIn("目标版本年份: 2014", output.getvalue())
 
     def test_mismatching_year_is_unresolved_even_if_title_unique(self):
         with patch("policy.abolition.find_policy_documents_by_normalized_title", return_value=[

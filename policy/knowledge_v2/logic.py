@@ -11,7 +11,7 @@ ASSERTION_KINDS = frozenset({"action", "condition", "definition", "scope", "stan
 MODALITIES = frozenset({"required", "permitted", "prohibited", "factual"})
 USABLE_STATUSES = frozenset({"machine_extracted", "approved", "corrected"})
 STRUCTURAL_LEVELS = frozenset({"chapter", "section", "article"})
-SUBSTANTIVE_LEVELS = frozenset({"preamble", "article", "paragraph", "item"})
+SUBSTANTIVE_LEVELS = frozenset({"preamble", "article", "paragraph", "item", "appendix"})
 MATTER_TITLE_RE = re.compile(r"申请|申报|办理|审批|认定|报销|聘任|变更|终止|登记|备案|采购|验收|入学|毕业|资助")
 ORDER_RE = re.compile(r"首先|其次|然后|之后|最后|审核后|批准后|经.+后|第一步|第二步|第三步")
 DOCUMENT_TYPE_ITEM_RE = re.compile(
@@ -182,6 +182,8 @@ def build_assertion_prompt(context: dict[str, Any]) -> str:
 可以用提供的上级条款补全省略主体，但必须设置 inferred_from_context=true 和 source_clause_id；不得把多处原文拼成证据。上级条款仅用于理解当前条款，不要重复抽取上级条款自身的事实。
 action 必须有 subject 和 predicate；其他类型允许 subject 为 null。object 和 receiver 不存在时填 null。
 qualifiers 固定包含 conditions、materials、deadline、amount、location、result、exceptions；没有内容时使用空数组或 null。
+conditions、materials、exceptions 必须是字符串数组，例如 ["因特殊情况"]，不能填写对象数组；deadline、amount、location、result 必须是字符串或 null。
+主体不在 evidence.text 中时，必须给出包含该主体原文的 source_clause_id 并标记 inferred_from_context=true；没有原文来源不得补写主体。
 单条原文包含多个动作或不同规范模态时拆成多条断言。定义、范围、标准、生效废止和制度引用不得强行改写成 action。
 输出结构：
 {{"assertions":[{{"kind":"action","subject":{{"text":"","type":"person|department|organization|role|other","inferred_from_context":false}},"predicate":{{"text":"","normalized":""}},"object":{{"text":"","type":"material|matter|document|person|other"}},"receiver":null,"modality":"required","qualifiers":{{"conditions":[],"materials":[],"deadline":null,"amount":null,"location":null,"result":null,"exceptions":[]}},"evidence":{{"clause_id":"","text":"","start":0,"end":1}},"confidence":0.0}}]}}。

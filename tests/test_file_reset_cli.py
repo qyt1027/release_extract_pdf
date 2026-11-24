@@ -269,7 +269,7 @@ class FileResetCliTests(unittest.TestCase):
             summary = reset_file_database_artifacts("pdf_123")
 
         self.assertEqual(summary, {
-            "text_vectors": 2,
+            "text_vectors": 4,
             "data_tables": 1,
             "forms": 1,
             "table_catalog_records": 2,
@@ -279,6 +279,7 @@ class FileResetCliTests(unittest.TestCase):
         self.assertEqual(fake_storage.relational.dropped_tables, ["pdf_pdf_123_tbl_sales"])
         self.assertEqual(fake_storage.vector.deleted, [
             ("pdf_pdf_123_text", "file_id", "pdf_123"),
+            ("pdf_text_chunks", "file_id", "pdf_123"),
             ("policy_clause_search", "policy_id", "policy_1"),
             ("policy_clause_vectors", "policy_id", "policy_1"),
             ("policy_assertion_search_v2", "policy_id", "policy_1"),
@@ -332,7 +333,7 @@ class FileResetCliTests(unittest.TestCase):
         with patch('processing.reset.storage', fake_storage):
             summary = reset_file_database_artifacts("pdf_123")
 
-        self.assertEqual(summary["text_vectors"], 2)
+        self.assertEqual(summary["text_vectors"], 4)
         self.assertEqual(summary["policy_clauses"], 2)
         self.assertIn(
             ("pdf_files", {"status": "pending", "error_message": "", "last_attempt_at": None}, '"file_id" = %s', ("pdf_123",)),

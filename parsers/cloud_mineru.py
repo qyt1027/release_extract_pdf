@@ -19,6 +19,34 @@ from .base import ParserStrategy
 
 logger = logging.getLogger(__name__)
 
+_OCR_REVIEW_SPAN = re.compile(
+    r'(?:^|(?<=[。！？])|(?<=[.!?])(?=[ \t]))[ \t]*'
+    r'(?:the\s+)?ground\s+truth\s+image\s+(?:displays?|shows?|contains?)\b'
+    r'(?:(?!\r?\n[ \t]*\r?\n)[\s\S]){0,2000}?'
+    r'\b(?:(?:hence|therefore|thus),?\s+)?(?:the\s+)?(?:ocr\s+)?(?:result|output)\s+'
+    r'(?:is\s+(?:inconsistent|not\s+consistent)\s+with|does\s+not\s+match)\s+'
+    r'(?:the\s+)?(?:ground\s+truth|gt)(?:[.!?]|(?=[ \t]*\r?$))'
+    r'(?:\s*(?:therefore,?\s+)?(?:the\s+)?corrected\s+ocr\s+output\s+is\s*:\s*\[empty\s+string\])?',
+    re.IGNORECASE | re.MULTILINE,
+)
+_OCR_REVIEW_RULE = re.compile(r'\b(?:according\s+to|under|violating)\s+(?:the\s+)?rule\s+\d+\b', re.IGNORECASE)
+_OCR_REVIEW_ASSESSMENT = re.compile(
+    r'\b(?:provided\s+ocr\s+(?:content|output|text)|incorrect\s+interpretation|ocr\s+has\s+hallucinated)\b',
+    re.IGNORECASE,
+)
+
+
+def _strip_ocr_review(text: str) -> str:
+    """同时核对评审开头、编号规则、纠错表述和结论，只删除匹配到的评审文字。"""
+    def remove_review(match: re.Match) -> str:
+        paragraph = match.group()
+        if _OCR_REVIEW_RULE.search(paragraph) and _OCR_REVIEW_ASSESSMENT.search(paragraph):
+            return ""
+        return paragraph
+
+    cleaned = _OCR_REVIEW_SPAN.sub(remove_review, text)
+    return cleaned.strip() if cleaned != text else text
+
 
 class CloudMineruParser(ParserStrategy):
     """
@@ -45,8 +73,11 @@ class CloudMineruParser(ParserStrategy):
     def client(self) -> httpx.Client:
         if self._client is None:
             headers = {}
-            if self.mode == "v4" and self.config.batch_api_key:
-                headers["Authorization"] = f"Bearer {self.config.batch_api_key}"
+            if self.mode == "v4":
+                api_key = self.config.batch_api_key.strip()
+                if not api_key:
+                    raise ValueError("使用 CloudMinerU v4 后端时必须配置 CLOUDMINERU_API_KEY")
+                headers["Authorization"] = f"Bearer {api_key}"
             self._client = httpx.Client(
                 base_url=self.base_url,
                 headers=headers,
@@ -204,13 +235,29 @@ class CloudMineruParser(ParserStrategy):
             timeout_seconds: Optional[float] = None
     ) -> MinerUTaskStatus:
         start = time.time()
+        limit = f"{timeout_seconds:g} 秒" if timeout_seconds else "不限时"
+        print(f"[CloudMinerU] 开始查询任务 {task_id}，等待上限={limit}", flush=True)
+        labels = {
+            "waiting-file": "等待文件上传或提交解析", "pending": "排队中",
+            "running": "解析中", "processing": "等待解析结果", "converting": "格式转换中",
+            "done": "已完成", "success": "已完成", "failed": "解析失败",
+        }
         while True:
             status = self.get_status(task_id)
+            elapsed = time.time() - start
+            description = labels.get(status.status, "未知状态")
+            print(
+                f"[CloudMinerU] 任务 {task_id}：状态={status.status}（{description}），"
+                f"已等待 {elapsed:.1f} 秒",
+                flush=True,
+            )
             if status.status in ("done", "success", "failed"):
                 return status
-            elapsed = time.time() - start
             if timeout_seconds and elapsed > timeout_seconds:
-                raise TimeoutError(f"任务 {task_id} 超时")
+                raise TimeoutError(
+                    f"任务 {task_id} 超时：已等待 {elapsed:.1f} 秒，"
+                    f"最后状态={status.status}（{description}）。仅停止本地等待，未取消云端任务。"
+                )
             time.sleep(self.config.poll_interval)
 
     # ========== Mojibake 检测与修复 ==========
@@ -416,7 +463,13 @@ class CloudMineruParser(ParserStrategy):
         同步解析 PDF，返回 ContentBlock 列表
         这是实现 ParserStrategy 接口的核心方法
         """
+        submit_start = time.time()
+        print(f"[CloudMinerU] 开始提交文件：{Path(file_path).name}，模式={self.mode}", flush=True)
         task_id = self.submit(file_path)
+        print(
+            f"[CloudMinerU] 文件提交完成，任务={task_id}，耗时 {time.time() - submit_start:.1f} 秒",
+            flush=True,
+        )
         timeout = max(60, page_count * self.config.timeout_per_page) if page_count else 300
         try:
             status = self.poll_until_done(task_id, timeout_seconds=timeout)
@@ -453,6 +506,18 @@ class CloudMineruParser(ParserStrategy):
                         block_type = BlockType.IMAGE
                     else:
                         block_type = BlockType.TEXT
+                        text_key = "text"
+                        if not content and isinstance(item.get("content"), str):
+                            text_key = "content"
+                            content = item[text_key]
+                        if isinstance(content, str):
+                            cleaned = _strip_ocr_review(content)
+                            if cleaned != content:
+                                logger.info("已清理 CloudMinerU OCR 评审文字（页索引 %s）", item.get("page_idx", 0))
+                                if not cleaned:
+                                    continue
+                                content = cleaned
+                                item = {**item, text_key: cleaned}
 
                     # 3. 构造 ContentBlock，挂载 raw
                     block = ContentBlock(
@@ -490,7 +555,11 @@ class CloudMineruParser(ParserStrategy):
             print(f"返回md链接：{status.markdown_url}")
             resp_md = httpx.get(status.markdown_url, timeout=30.0)
             resp_md.raise_for_status()
-            md_content = resp_md.text
+            md_content = _strip_ocr_review(resp_md.text)
+            if md_content != resp_md.text:
+                logger.info("已清理 CloudMinerU Markdown 中的 OCR 评审文字")
+                if not md_content:
+                    return blocks
             blocks.append(ContentBlock(
                 block_id=f"blk_{hashlib.md5(file_path.encode()).hexdigest()[:12]}",
                 type=BlockType.TEXT,

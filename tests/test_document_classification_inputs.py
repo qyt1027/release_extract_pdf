@@ -9,16 +9,48 @@ from core.models import BlockType, ContentBlock
 
 
 class DocumentClassificationInputTests(unittest.TestCase):
-    def test_mhtml_source_doc_number_is_strong_policy_signal(self) -> None:
+    def test_local_doc_uses_verified_body_title_despite_collector_filename(self):
+        from classification.document import classify_document
+
+        title = '电子信息学院院务公开实施办法'
+        result = classify_document(
+            'example.doc', '（行政）电子信息学院院务公开的实施办法.doc',
+            parsed_text=title + '\n一、院务公开列入学院年度工作的重要事项。',
+            source_metadata={'title': title},
+        )
+        self.assertEqual(result['doc_type'], 'policy_regulation')
+
+    def test_source_title_without_matching_opening_cannot_make_a_policy(self):
+        from classification.document import classify_document
+
+        for text in ('', '制度解读材料\n电子信息学院院务公开实施办法\n相关要求说明。'):
+            with self.subTest(text=text):
+                result = classify_document(
+                    'example.doc', '研讨资料.doc', parsed_text=text,
+                    source_metadata={'title': '电子信息学院院务公开实施办法'},
+                )
+                self.assertEqual(result['doc_type'], 'other')
+
+    def test_mhtml_source_doc_number_alone_does_not_make_a_policy(self) -> None:
+        from classification.document import classify_document
+
+        result = classify_document(
+            "example.doc", "武汉大学工作安排.doc",
+            parsed_text="一、总体要求\n二、具体措施",
+            source_metadata={"doc_number": "武大研字[2023]7号"},
+        )
+        self.assertEqual(result["doc_type"], "other")
+        self.assertIn("检测到公文发文字号", result["signals"])
+
+    def test_numbered_implementation_opinion_with_scope_and_requirements_is_policy(self) -> None:
         from classification.document import classify_document
 
         result = classify_document(
             "example.doc", "武汉大学关于博士研究生学制改革的实施意见.doc",
-            parsed_text="一、总体要求\n二、具体措施",
+            parsed_text="本意见适用于学校各培养单位。各单位应当按照规定学制组织培养。",
             source_metadata={"doc_number": "武大研字[2023]7号"},
         )
         self.assertEqual(result["doc_type"], "policy_regulation")
-        self.assertIn("[强信号]检测到公文发文字号", result["signals"])
 
     def test_cloudmineru_text_is_used_for_policy_classification(self) -> None:
         from classification.document import classify_document

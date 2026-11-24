@@ -1,4 +1,4 @@
-"""面向 Agent 的四个制度工具及参数约束。"""
+"""面向 Agent 的制度工具及参数约束。"""
 import re
 from datetime import date
 from typing import Annotated, Any, Literal
@@ -40,6 +40,17 @@ async def _invoke(ctx: Context, method: str, *args) -> dict:
 def register_tools(server: MCPServer) -> None:
     """注册工具，SDK 自动注入上下文，不向 Agent 暴露客户端参数。"""
     read_only = ToolAnnotations(read_only_hint=True, destructive_hint=False)
+
+    @server.tool(annotations=read_only)
+    async def get_policy_relations(
+        policy_id: Annotated[str, Field(min_length=1, pattern=r"^[A-Za-z0-9_-]+$", description="目录或检索结果中的制度 ID")],
+        ctx: Context,
+        depth: Annotated[int, Field(ge=1, le=3, description="关联跳数，1 到 3")] = 1,
+        direction: Annotated[Literal["both", "incoming", "outgoing"], Field(description="双向、被哪些文件引用、引用了哪些文件")] = "both",
+        limit: Annotated[int, Field(ge=1, le=200, description="最多返回的原始关系数")] = 100,
+    ) -> dict[str, Any]:
+        """查询文件级引用、提及和废止关联，返回原文与审核状态。未入库或多版本目标会明确标记；多跳关系不能推导废止或失效，待审核废止不能当作已确认结论。"""
+        return await _invoke(ctx, "get_policy_relations", policy_id, depth, direction, limit)
 
     @server.tool(annotations=read_only)
     async def search_policy_clauses(

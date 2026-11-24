@@ -2,17 +2,56 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from commands.handlers import run_process_dir
-from policy.clause_export import export_batch_clause_structure
+from policy.clause_export import build_batch_clause_structure, export_batch_clause_structure
 
 
 class PolicyClauseExportTests(unittest.TestCase):
     """验证批次完成后可交付按条款组织的结构化 JSON。"""
+
+    def test_export_keeps_zero_pages_dates_scope_and_document_number_alias(self):
+        payload = build_batch_clause_structure("batch_1", [{
+            "policy_id": "p", "file_name": "制度.pdf", "doc_number": "武大字〔2023〕14号",
+            "applicable_unit": ["计算机学院"], "issue_date": date(2023, 12, 21),
+            "effective_date": date(2024, 1, 1), "expiry_date": None,
+            "validity_status": "current", "version": "2023年修订", "parse_quality": 0.0,
+            "source_page_start": 0, "source_page_end": 1,
+        }], {"p": [{"clause_id": "c", "page_start": 0, "page_end": 0, "sequence_no": 0}]})
+        result = json.loads(json.dumps(payload, ensure_ascii=False))
+        document = result["documents"][0]
+        self.assertEqual(document["clauses"][0]["page_start"], 0)
+        self.assertEqual(document["clauses"][0]["page_end"], 0)
+        self.assertEqual(document["clauses"][0]["sequence_no"], 0)
+        self.assertEqual(document["source_page_start"], 0)
+        self.assertEqual(document["applicable_unit"], ["计算机学院"])
+        self.assertEqual(document["issue_date"], "2023-12-21")
+        self.assertEqual(document["effective_date"], "2024-01-01")
+        self.assertEqual(document["validity_status"], "current")
+        self.assertEqual(document["version"], "2023年修订")
+        self.assertEqual(document["parse_quality"], 0.0)
+        self.assertEqual(document["document_no"], "武大字〔2023〕14号")
+
+    def test_export_derives_parent_paths_from_stored_applicable_units(self):
+        units = ["中国边界与海洋研究院", "国际问题研究院"]
+        payload = build_batch_clause_structure("b", [{"policy_id": "p", "applicable_unit": units}], {})
+        document = payload["documents"][0]
+        self.assertEqual(document["applicable_unit"], units)
+        self.assertEqual(document["applicable_unit_paths"], [
+            "前沿交叉学科研究院-中国边界与海洋研究院",
+            "前沿交叉学科研究院-国际问题研究院",
+        ])
+
+    def test_export_keeps_month_without_a_fictitious_day(self):
+        payload = build_batch_clause_structure("b", [{"policy_id": "p", "issue_month": "2013-03"}], {})
+        document = payload["documents"][0]
+        self.assertEqual(document.get("issue_month"), "2013-03")
+        self.assertEqual(document["issue_date"], "")
 
     def test_export_batch_clause_structure_preserves_clause_hierarchy_and_citation(self) -> None:
         """防止导出的 JSON 丢失条款层级、页码或原文，无法用作后续核查输入。"""

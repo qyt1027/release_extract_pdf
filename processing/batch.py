@@ -6,6 +6,7 @@ import os
 import time
 import uuid
 from datetime import datetime, timedelta
+from functools import cache
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -249,6 +250,8 @@ def _process_item(
     max_attempts: int,
     abolition_confirmation: Callable[[Any], str] | None = None,
     abolition_approval_confirmation: Callable[[dict[str, Any]], str] | None = None,
+    duplicate_confirmation: Callable[[dict[str, Any]], str] | None = None,
+    folder_unit_confirmation: Callable[[str, str, str], bool] | None = None,
 ) -> None:
     """处理一个文件任务，临时错误自动重试并持久化每次状态。"""
     file_path = Path(item["file_path"])
@@ -262,23 +265,12 @@ def _process_item(
             with fitz.open(str(file_path)) as document:
                 page_count = len(document)
         else:
-            # Word 页数由 CloudMinerU 解析，提交前无法可靠获得。
+            # DOC、DOCX 和网页归档直接提取正文，不推测其排版页数。
             page_count = 0
         file_data = file_path.read_bytes()
     except Exception as exc:
         _mark_failed(item["item_id"], f"文档无法读取: {exc}", ErrorKind.PERMANENT)
         return
-
-    if suffix == ".doc" and app_config.parser.parser_backend != "cloudmineru":
-        from parsers.mhtml_doc import is_mhtml_document
-
-        if suffix != ".doc" or not is_mhtml_document(file_data):
-            _mark_failed(
-                item["item_id"],
-                "真正的 DOC 仅支持 cloudmineru 解析后端",
-                ErrorKind.PERMANENT,
-            )
-            return
 
     # 二次核对，避免批次创建后源文件被替换。
     actual_hash = calculate_file_hash(file_data)
@@ -288,7 +280,7 @@ def _process_item(
 
     record = ensure_file_record(item["file_name"], file_data, page_count, versions)
     existing_status = record.get("status")
-    if existing_status in {"done", "succeeded"}:
+    if existing_status in {"done", "succeeded", "skipped"}:
         update_batch_item(
             item["item_id"],
             {
@@ -336,6 +328,9 @@ def _process_item(
                 datetime.now() - timedelta(seconds=HEARTBEAT_TIMEOUT_SECONDS),
             )
 
+    # 同一个文件自动重试时，沿用用户刚才的适用单位选择。
+    if folder_unit_confirmation is not None:
+        folder_unit_confirmation = cache(folder_unit_confirmation)
     latest_item = item
     for _ in range(max_attempts):
         attempt_count = _mark_item_running(latest_item, record["file_id"])
@@ -346,7 +341,18 @@ def _process_item(
             source_file_name=str(item.get("file_name") or file_path.name),
             abolition_confirmation=abolition_confirmation,
             abolition_approval_confirmation=abolition_approval_confirmation,
+            duplicate_confirmation=duplicate_confirmation,
+            folder_unit_confirmation=folder_unit_confirmation,
         )
+        if result.status.value in {"pending_confirmation", "skipped"}:
+            update_batch_item(item["item_id"], {
+                "file_id": result.file_id or record["file_id"],
+                "status": result.status.value, "last_error": result.message,
+                "error_kind": None, "next_retry_at": None,
+                "finished_at": datetime.now() if result.status.value == "skipped" else None,
+                "heartbeat_at": datetime.now(),
+            })
+            return
         if result.status.value in {"done", "succeeded"}:
             update_batch_item(
                 item["item_id"],
@@ -387,6 +393,8 @@ def _eligible(
 ) -> bool:
     """判断任务是否应在本次运行中领取。"""
     status = item.get("status")
+    if status == BatchItemStatus.PENDING_CONFIRMATION.value:
+        return resume
     if status in {BatchItemStatus.SUCCEEDED.value, BatchItemStatus.SKIPPED.value}:
         return False
     if status == BatchItemStatus.PENDING.value:
@@ -396,6 +404,11 @@ def _eligible(
     if status == BatchItemStatus.RUNNING.value:
         return _is_stale(item)
     if status == BatchItemStatus.FAILED.value:
+        # 旧版本在解析前拦截的 DOC 现可本地读取，允许显式续跑接管这些历史失败。
+        if (resume and int(item.get("attempt_count") or 0) == 0
+                and item.get("last_error") == "真正的 DOC 仅支持 cloudmineru 解析后端"
+                and Path(str(item.get("file_path") or item.get("file_name") or "")).suffix.lower() == ".doc"):
+            return True
         return resume and item.get("error_kind") == ErrorKind.TRANSIENT.value \
             and int(item.get("attempt_count") or 0) < max_attempts
     return False
@@ -441,6 +454,8 @@ def _summarize_batch_items(items: list[dict[str, Any]]) -> dict[str, Any]:
         status = BatchStatus.PENDING.value
     elif any(i.get("status") == BatchItemStatus.RETRY_WAIT.value for i in items):
         status = BatchStatus.RETRY_WAIT.value
+    elif any(i.get("status") == BatchItemStatus.PENDING_CONFIRMATION.value for i in items):
+        status = BatchStatus.PENDING_CONFIRMATION.value
     else:
         status = BatchStatus.PENDING.value
     return {"status": status, **counts}
@@ -472,6 +487,8 @@ def run_batch(
     resume: bool = False,
     abolition_confirmation: Callable[[Any], str] | None = None,
     abolition_approval_confirmation: Callable[[dict[str, Any]], str] | None = None,
+    duplicate_confirmation: Callable[[dict[str, Any]], str] | None = None,
+    folder_unit_confirmation: Callable[[str, str, str], bool] | None = None,
 ) -> dict[str, Any]:
     """运行新批次或恢复已有批次。"""
     batch = get_batch(batch_id)
@@ -524,6 +541,8 @@ def run_batch(
                     max_attempts,
                     abolition_confirmation,
                     abolition_approval_confirmation,
+                    duplicate_confirmation,
+                    folder_unit_confirmation,
                 )
                 active_item_id = None
                 _refresh_batch(batch_id)

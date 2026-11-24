@@ -18,6 +18,42 @@ def run_api():
     uvicorn.run(app, host="127.0.0.1", port=12700)
 
 
+def prompt_folder_applicable_unit(file_path: str, title: str, college: str) -> bool:
+    """明确确认后才采用父目录的学院名。"""
+    print(f"\n文件：{file_path}")
+    print(f"《{title}》的适用范围为院级，具体学院未能识别。")
+    while True:
+        try:
+            answer = input(f"是否采用上级文件夹的「{college}」作为适用单位？[y]采用 [n]留空（默认）：").strip().lower()
+        except (EOFError, OSError):
+            return False
+        if answer == "y":
+            print(f"适用单位已确认为「{college}」。")
+            return True
+        if answer in {"", "n"}:
+            return False
+        print("请输入 y 或 n。")
+
+
+def prompt_file_overwrite(record: dict) -> bool | None:
+    """只有明确输入 y 才覆盖相同内容的已完成文件。"""
+    print("\n检测到相同内容的已导入文件")
+    print(f"当前文件：{record.get('source_file_name') or record.get('file_name')}")
+    print(f"已有文件：{record.get('file_name')}")
+    print(f"文件 ID：{record.get('file_id')}")
+    while True:
+        try:
+            answer = input("是否重新解析并覆盖已有数据？[y]覆盖 [n]跳过（默认）：").strip().lower()
+        except (EOFError, OSError):
+            print("无法读取覆盖选择，本次未执行覆盖。")
+            return None
+        if answer == "y":
+            return True
+        if answer in {"", "n"}:
+            return False
+        print("请输入 y 或 n。")
+
+
 def run_process(pdf_path: str, backend: str = None):
     """命令行处理单个文档。"""
     # 如果指定了 backend，修改全局 config
@@ -43,11 +79,15 @@ def run_process(pdf_path: str, backend: str = None):
         print("页数: 不适用（按文档正文块处理）")
 
     abolition_prompt = prompt_abolition_relation_insertion()
+    from policy.duplicates import prompt_duplicate_import
     result = process_pdf(
         pdf_path,
         page_count,
         abolition_confirmation=abolition_prompt,
         abolition_approval_confirmation=abolition_prompt.confirm_approval,
+        duplicate_confirmation=prompt_duplicate_import,
+        folder_unit_confirmation=prompt_folder_applicable_unit,
+        file_overwrite_confirmation=prompt_file_overwrite,
     )
 
     print(f"\n处理结果:")
@@ -64,6 +104,8 @@ def run_process(pdf_path: str, backend: str = None):
     print(f"  已跳过关系: {result.abolition_relations_skipped}")
     print(f"  已批准历史关系: {result.abolition_relations_approved}")
     print(f"  耗时:       {result.duration_seconds}s")
+    if result.message:
+        print(f"  说明:       {result.message}")
     if result.errors:
         print(f"  错误:")
         for e in result.errors:
@@ -87,7 +129,7 @@ def _print_batch_summary(status: dict) -> None:
     print(f"待重试: {batch.get('retryable_failed_count', 0)}")
     print(f"永久失败: {batch.get('permanent_failed_count', 0)}")
     items = status.get("items", [])
-    waiting = [item for item in items if item.get("status") in {"pending", "retry_wait", "running"}
+    waiting = [item for item in items if item.get("status") in {"pending", "retry_wait", "running", "pending_confirmation"}
                or (item.get("status") == "failed" and item.get("error_kind") == "transient")]
     for item in waiting:
         file_name = item.get("file_name") or item.get("file_path") or item.get("item_id") or "未知文件"
@@ -110,10 +152,13 @@ def run_process_dir(source_dir: str, backend: str = None) -> None:
     batch_id = create_batch_job(source_dir)
     print(f"已创建批次: {batch_id}")
     abolition_prompt = prompt_abolition_relation_insertion()
+    from policy.duplicates import prompt_duplicate_import
     status = run_batch(
         batch_id,
         abolition_confirmation=abolition_prompt,
         abolition_approval_confirmation=abolition_prompt.confirm_approval,
+        duplicate_confirmation=prompt_duplicate_import,
+        folder_unit_confirmation=prompt_folder_applicable_unit,
     )
     _print_batch_summary(status)
     output_path = Path(source_dir).resolve() / f"{batch_id}_条款重组结果.json"
@@ -124,8 +169,12 @@ def run_process_dir(source_dir: str, backend: str = None) -> None:
 def run_resume_batch(batch_id: str) -> None:
     """恢复指定批次。"""
     from processing.batch import run_batch
+    from policy.duplicates import prompt_duplicate_import
 
-    status = run_batch(batch_id, resume=True)
+    status = run_batch(
+        batch_id, resume=True, duplicate_confirmation=prompt_duplicate_import,
+        folder_unit_confirmation=prompt_folder_applicable_unit,
+    )
     _print_batch_summary(status)
 
 
@@ -538,3 +587,31 @@ def run_report_policy_quality(output_dir: str) -> None:
         write_quality_report(output_dir),
     )
 
+
+
+def run_migrate_text_chunks(*, dry_run=False, legacy_model=None):
+    """输出逐文件迁移报告；存在失败项时返回非零退出码。"""
+    import json
+    from storage.text_migration import migrate_text_chunks
+    report = migrate_text_chunks(dry_run=dry_run, legacy_model=legacy_model)
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    if report["errors"]:
+        raise SystemExit(1)
+
+
+def run_normalize_applicable_units(*, dry_run=False):
+    """由操作者显式预览或执行已有适用单位的统一。"""
+    import json
+    from policy.unit_normalization import normalize_stored_applicable_units
+    print(json.dumps(normalize_stored_applicable_units(dry_run=dry_run), ensure_ascii=False, indent=2))
+
+
+def run_rebuild_file_text(file_id: str, *, source_path=None):
+    """为单个冲突文件重新生成文本向量，不运行文件重置。"""
+    import json
+    from processing.text_rebuild import rebuild_file_text
+    try:
+        report=rebuild_file_text(file_id,source_path)
+    except ValueError as exc:
+        raise SystemExit(f'文本重建未执行或未完成：{exc}') from None
+    print(json.dumps(report,ensure_ascii=False,indent=2))

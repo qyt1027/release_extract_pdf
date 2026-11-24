@@ -5,20 +5,29 @@ import re
 from datetime import date
 from typing import Any, Iterable
 
+from core.policy_signatures import PUBLICATION_ACTION_PATTERN
 
+
+_EFFECTIVE_VERB = r"(?:施行|实施|实行|执行|试行|生效)"
 _ABSOLUTE_DATE_RE = re.compile(
-    r"自\s*(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日\s*起\s*(?:施行|执行|生效)"
+    rf"(?:自|于|从)\s*(\d{{4}})\s*年\s*(\d{{1,2}})\s*月\s*(\d{{1,2}})\s*日\s*起\s*{_EFFECTIVE_VERB}"
 )
-_RELATIVE_DATE_RE = re.compile(r"自\s*(?:发布|印发)\s*之日\s*起\s*(?:施行|执行|生效)")
+_RELATIVE_DATE_RE = re.compile(rf"自\s*{PUBLICATION_ACTION_PATTERN}\s*之日\s*起\s*{_EFFECTIVE_VERB}")
+_UNRESOLVED_EFFECTIVE_RE = re.compile(
+    rf"\d{{4}}\s*年(?:度|\s*\d{{1,2}}\s*月)?\s*(?:起|开始)\s*{_EFFECTIVE_VERB}|"
+    rf"(?:自|从)[^。；;\n]{{0,40}}通过\s*(?:之日)?\s*(?:起|开始)?\s*{_EFFECTIVE_VERB}"
+)
 
 
 def extract_effective_date(texts: Iterable[str], issue_date: str | None) -> dict[str, str | None]:
     """只在证据唯一时返回文档生效日期。"""
     dates: set[str] = set()
     relative = False
+    unresolved = False
     for text in texts:
         value = str(text or "")
         relative = relative or bool(_RELATIVE_DATE_RE.search(value))
+        unresolved = unresolved or bool(_UNRESOLVED_EFFECTIVE_RE.search(value))
         for match in _ABSOLUTE_DATE_RE.finditer(value):
             try:
                 dates.add(date(int(match[1]), int(match[2]), int(match[3])).isoformat())
@@ -33,7 +42,7 @@ def extract_effective_date(texts: Iterable[str], issue_date: str | None) -> dict
         return {"effective_date": None, "status": "conflict"}
     if len(dates) == 1:
         return {"effective_date": next(iter(dates)), "status": "identified"}
-    return {"effective_date": None, "status": "needs_review" if relative else "unknown"}
+    return {"effective_date": None, "status": "needs_review" if relative or unresolved else "unknown"}
 
 
 def normalize_family_title(title: str) -> str:
